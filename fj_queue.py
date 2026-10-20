@@ -40,6 +40,7 @@ to stable internal names on the frozen dataclasses below.
 
 from __future__ import annotations
 
+import contextlib
 import math
 import os
 import re
@@ -2630,8 +2631,11 @@ def render_rich(snap: Snapshot):
 #
 #   * KeyboardInterrupt:
 #       clean teardown via Live's context manager + Client.close().
-#       Return exit=0 (the operator deliberately stopped a working
-#       loop; that's not a failure).
+#       Return exit=130 (POSIX 128 + SIGINT).
+#
+#   * `q` / `Q` keypress (interactive POSIX TTY only):
+#       the inter-tick wait watches stdin in cbreak mode; a `q` ends
+#       the loop with exit=0, htop/less style.
 #
 # Architecture: aggregate() is pure (M2), renderers are pure (M4), so
 # the watch loop is the only place where I/O, clock, and sleep meet.
@@ -2883,6 +2887,74 @@ def _do_one_fetch(
     )
 
 
+class _QuitKeyWatcher:
+    """Context manager that lets the watch loop's inter-tick wait end
+    early when the operator presses `q`.
+
+    On enter, puts `stream` (stdin) in cbreak mode: keys arrive one at
+    a time without echo, while ISIG stays on so Ctrl-C still raises
+    KeyboardInterrupt. The saved terminal attributes are restored on
+    exit. Stdlib only (termios/tty/select); on non-POSIX platforms or
+    when `stream` is not a TTY (pipe, pytest capture) it degrades to a
+    plain sleep and `wait()` never reports a quit.
+    """
+
+    def __init__(self, stream) -> None:
+        self._stream = stream
+        self._fd: int | None = None
+        self._saved: list | None = None
+
+    def __enter__(self) -> Self:
+        try:
+            import termios
+            import tty
+
+            fd = self._stream.fileno()
+            if not os.isatty(fd):
+                return self
+            saved = termios.tcgetattr(fd)
+            tty.setcbreak(fd)
+        except Exception:  # noqa: BLE001 (never crash on terminal setup)
+            # No termios (Windows), no fileno (StringIO), closed fd,
+            # termios.error (not an OSError subclass).
+            return self
+        self._fd, self._saved = fd, saved
+        return self
+
+    def __exit__(self, *exc_info) -> None:
+        if self._fd is not None and self._saved is not None:
+            import termios
+
+            termios.tcsetattr(self._fd, termios.TCSADRAIN, self._saved)
+            self._fd = self._saved = None
+
+    def wait(self, timeout: float) -> bool:
+        """Sleep up to `timeout` seconds. Returns True iff `q`/`Q` was
+        pressed (keys typed during a fetch are buffered and seen here).
+        Other keys are read and discarded.
+        """
+        import select
+        import time as _time
+
+        fd = self._fd
+        if fd is None:
+            _time.sleep(timeout)
+            return False
+        deadline = _time.monotonic() + timeout
+        while (remaining := deadline - _time.monotonic()) > 0:
+            ready, _, _ = select.select([fd], [], [], remaining)
+            if not ready:
+                return False
+            ch = os.read(fd, 1)
+            if ch in (b"q", b"Q"):
+                return True
+            if not ch:
+                # EOF on the TTY: nothing more to read; finish the wait.
+                _time.sleep(max(0.0, deadline - _time.monotonic()))
+                return False
+        return False
+
+
 def run_watch(
     config: Config,
     *,
@@ -2894,6 +2966,7 @@ def run_watch(
     client: Client | None = None,
     clock=None,
     sleep_fn=None,
+    wait_fn: Callable[[float], bool] | None = None,
     console=None,
     on_frame=None,
     screen: bool = True,
@@ -2937,9 +3010,15 @@ def run_watch(
         EXIT_INTERRUPTED (130; POSIX 128 + SIGINT=2). NOT EXIT_OK;
         agents scripting the watch path want to distinguish "operator
         stopped a working loop" from "loop completed iterations".
+      `q` keypress:
+        The inter-tick wait is `wait_fn(interval)`; True means "quit"
+        and returns EXIT_OK. Default: if `sleep_fn` is injected, wait
+        = sleep_fn and never quits (tests); otherwise a
+        _QuitKeyWatcher on stdin (POSIX TTY, else plain sleep).
 
     Exit codes returned (NOT raised):
-      EXIT_OK (0)           normal termination (iterations cap hit)
+      EXIT_OK (0)           normal termination (iterations cap hit,
+                            or operator pressed `q`)
       EXIT_INTERRUPTED (130) operator pressed Ctrl-C
     Exit codes delivered by raising (M6 maps via exit_code_for):
       EXIT_AUTH (3)         AuthError (any tick; bad/expired token)
@@ -2959,6 +3038,19 @@ def run_watch(
 
     if clock is None:
         clock = lambda: datetime.now(UTC)
+    key_watcher: _QuitKeyWatcher | None = None
+    if wait_fn is None:
+        if sleep_fn is None:
+            key_watcher = _QuitKeyWatcher(_sys.stdin)
+            wait_fn = key_watcher.wait
+        else:
+            injected_sleep = sleep_fn
+
+            def _sleep_never_quit(seconds: float) -> bool:
+                injected_sleep(seconds)
+                return False
+
+            wait_fn = _sleep_never_quit
     if sleep_fn is None:
         sleep_fn = _time.sleep
     if console is None:
@@ -2982,20 +3074,23 @@ def run_watch(
     tick_index = 0
 
     try:
-        with _RichLive(
-            console=console,
-            screen=screen,
-            # Lower than Rich's default 10 because we call live.update()
-            # explicitly each tick; the auto-refresh rate only governs
-            # spinner/animation repaints, which this dashboard doesn't
-            # use. Gentler on SSH/mosh terminals.
-            refresh_per_second=4,
-            # No-op while screen=True (the alt-screen is unconditionally
-            # torn down on exit, htop/top/less semantics). Kept explicit
-            # for readability and so a future screen=False inline mode
-            # doesn't accidentally erase the last rendered frame.
-            transient=False,
-        ) as live:
+        with (
+            _RichLive(
+                console=console,
+                screen=screen,
+                # Lower than Rich's default 10 because we call live.update()
+                # explicitly each tick; the auto-refresh rate only governs
+                # spinner/animation repaints, which this dashboard doesn't
+                # use. Gentler on SSH/mosh terminals.
+                refresh_per_second=4,
+                # No-op while screen=True (the alt-screen is unconditionally
+                # torn down on exit, htop/top/less semantics). Kept explicit
+                # for readability and so a future screen=False inline mode
+                # doesn't accidentally erase the last rendered frame.
+                transient=False,
+            ) as live,
+            key_watcher or contextlib.nullcontext(),
+        ):
             while True:
                 if iterations is not None and tick_index >= iterations:
                     return EXIT_OK
@@ -3077,7 +3172,9 @@ def run_watch(
 
                 if iterations is not None and tick_index >= iterations:
                     return EXIT_OK
-                sleep_fn(interval)
+                if wait_fn(interval):
+                    # Operator pressed `q`: deliberate, clean stop.
+                    return EXIT_OK
     except KeyboardInterrupt:
         # POSIX convention: 128 + signal number. SIGINT = 2 -> 130.
         # Agents scripting fj-queue distinguish operator-stop (130)

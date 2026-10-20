@@ -552,6 +552,72 @@ def test_keyboard_interrupt_during_fetch_exits_130():
 
 
 # ---------------------------------------------------------------------------
+# `q` to quit.
+# ---------------------------------------------------------------------------
+
+
+def test_q_keypress_during_wait_exits_0():
+    """wait_fn returning True (operator pressed `q`) ends the loop
+    cleanly with EXIT_OK, before the next tick fetches.
+    """
+    client = FakeClient([_good_tick(), _good_tick()])
+    waits: list[float] = []
+
+    def wait(seconds: float) -> bool:
+        waits.append(seconds)
+        return True
+
+    rc = fq.run_watch(
+        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        interval=3.0,
+        iterations=10,
+        client=client,
+        clock=_stepping_clock(T0),
+        wait_fn=wait,
+        console=_silent_console(),
+        screen=False,
+    )
+    assert rc == fq.EXIT_OK
+    assert client.tick_calls == 1
+    assert waits == [3.0]
+
+
+@pytest.mark.skipif(not hasattr(fq.os, "openpty"), reason="needs a POSIX pty")
+def test_quit_key_watcher_reads_q_from_tty():
+    """On a real TTY the watcher enters cbreak mode, ignores other
+    keys, reports `q`, and restores the terminal attributes on exit.
+    """
+    termios = pytest.importorskip("termios")
+    master, slave = fq.os.openpty()
+    try:
+        with open(slave, "rb", buffering=0, closefd=False) as stream:
+            before = termios.tcgetattr(slave)
+            with fq._QuitKeyWatcher(stream) as watcher:
+                assert termios.tcgetattr(slave) != before
+                assert watcher.wait(0.01) is False
+                fq.os.write(master, b"xq")
+                assert watcher.wait(2.0) is True
+            after = termios.tcgetattr(slave)
+            # PENDIN is set by the kernel itself (macOS) when switching
+            # back to canonical mode; it is not something we changed.
+            pendin = getattr(termios, "PENDIN", 0)
+            after[3] &= ~pendin
+            before[3] &= ~pendin
+            assert after == before
+    finally:
+        fq.os.close(master)
+        fq.os.close(slave)
+
+
+def test_quit_key_watcher_non_tty_never_quits():
+    """Without a TTY (pipe, StringIO, pytest capture) the watcher is a
+    plain sleep and never reports a quit.
+    """
+    with fq._QuitKeyWatcher(io.StringIO("q")) as watcher:
+        assert watcher.wait(0.0) is False
+
+
+# ---------------------------------------------------------------------------
 # Iterations bound + tick mechanics.
 # ---------------------------------------------------------------------------
 

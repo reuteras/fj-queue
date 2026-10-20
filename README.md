@@ -70,7 +70,7 @@ cd fj-queue
 # Single snapshot
 uv run fj_queue.py --host git.example.com
 
-# Live dashboard (default at a TTY)
+# Live dashboard (default at a TTY); press q (or Ctrl-C) to quit
 uv run fj_queue.py --host git.example.com --mode watch
 
 # Agent: JSON output piped to jq

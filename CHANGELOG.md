@@ -11,6 +11,11 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ### Added
 
+- **`q` quits watch mode.** At an interactive terminal, pressing `q` (or
+  `Q`) stops the live dashboard and exits 0. Ctrl-C still works and still
+  exits 130. Implemented with stdlib `termios`/`select` (POSIX only; on
+  other platforms or without a TTY, only Ctrl-C applies).
+
 - **Running jobs section** in the human renderers (`RUNNING (n):` in plain,
   a `Running` table in rich): job id, task id, repo, job name, attempt and
   `runs_on` for every job currently executing. Scoped by `--repo` /
