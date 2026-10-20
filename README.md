@@ -9,25 +9,33 @@ A read-only Forgejo Actions runner and CI queue dashboard.
 ![fj-queue](docs/img/hero.png)
 
 Polls the Forgejo admin Actions API and renders runner inventory, queue totals,
-per-repo backlog, a FIFO-approximate queue order, and structured warnings for
-unschedulable jobs and possibly wedged workflow_call sentinels (forgejo#12127,
-see [Caveats](docs/caveats.md#wedged-sentinel-detection-is-heuristic)).
+per-repo backlog, the jobs currently running, a FIFO-approximate queue order,
+and structured warnings for unschedulable jobs and possibly wedged
+workflow_call sentinels (forgejo#12127, see
+[Caveats](docs/caveats.md#wedged-sentinel-detection-is-heuristic)).
 Designed for two audiences:
 
-- **Humans**: a live, in-place refreshing terminal UI (Rich) so an operator
-  can see at a glance whether CI is saturated.
+- **Humans**: a live, in-place refreshing terminal UI (Rich), or plain text,
+  so an operator can see at a glance whether CI is saturated and what is
+  running right now.
 - **Agents**: a stable, byte-deterministic JSON document (`--format json`)
   backed by a committed JSON Schema, so scripts can branch on global
   saturation, a repo's queue position, and structured `blocked_reason` /
   `warnings` fields.
 
+This is a fork of [vtmocanu/fj-queue](https://github.com/vtmocanu/fj-queue).
+See [Differences from upstream](#differences-from-upstream).
+
 ## Quick Start
 
-Clone the repository and run it with [`uv`](https://docs.astral.sh/uv/),
-which resolves the dependencies on first run (`./fj-queue` is a symlink to
-`fj_queue.py`):
+Requirements: Python 3.11+, [`uv`](https://docs.astral.sh/uv/), an
+admin-scoped Forgejo API token, and optionally the
+[1Password CLI](https://developer.1password.com/docs/cli/) (`op`).
 
 ```bash
+git clone https://github.com/reuteras/fj-queue.git
+cd fj-queue
+
 # Single snapshot
 uv run fj_queue.py --host git.example.com
 
@@ -38,18 +46,29 @@ uv run fj_queue.py --host git.example.com --mode watch
 uv run fj_queue.py --host git.example.com --format json | jq '.totals'
 ```
 
-Provide an **admin-scoped** Forgejo API token via `$FORGEJO_TOKEN`, or store
-it in 1Password and point the config file at it with
-`token_ref = "op://Vault/Item/field"` (read with the `op` CLI). A non-admin
-token exits 3.
+`uv` resolves the dependencies on first run; `./fj-queue` is a symlink to
+`fj_queue.py`.
 
-See [Installation](docs/installation.md) for requirements and token setup.
+## Token
 
-For persistent settings, create `~/.config/fj-queue/config.toml` (or pass
-any file with `--config PATH`; `./fj-queue.toml` is not auto-loaded):
+There is no `--token` flag (command-line arguments are visible to other local
+users via `ps`). The token is resolved in this order:
+
+1. `$FORGEJO_TOKEN`
+2. `token_ref` in the config file: a 1Password secret reference
+   (`op://<vault>/<item>/<field>`), read with `op read` at startup.
+
+A non-admin token exits 3. See [Installation](docs/installation.md) and
+[Configuration](docs/configuration.md) for details.
+
+## Configuration
+
+Put persistent settings in `~/.config/fj-queue/config.toml` (or pass any file
+with `--config PATH`; `./fj-queue.toml` is deliberately not auto-loaded):
 
 ```toml
 host = "git.example.com"
+token_ref = "op://Private/Forgejo admin token/credential"
 
 # Metrics and NCPS are OFF by default.
 # Uncomment and supply a Prometheus URL to enable them.
@@ -59,8 +78,7 @@ host = "git.example.com"
 # namespace = "ci-runners"
 ```
 
-See [`config.toml.example`](config.toml.example) for the full format with
-all supported keys.
+See [`config.toml.example`](config.toml.example) for all supported keys.
 
 ## Documentation
 
@@ -73,4 +91,37 @@ all supported keys.
 | [Metrics and NCPS](docs/metrics-ncps.md) | Per-pod CPU/memory and NCPS cache status (opt-in) |
 | [Caveats](docs/caveats.md) | FIFO approximation, blocked jobs, filter scope |
 
-See also: [Homelab Adventures: fj-queue](https://hai.wxs.ro/custom-tools/fj-queue/) for the background and design notes.
+## Development
+
+```bash
+uv sync --group dev
+uv run --frozen --group dev pytest tests/
+uv run --frozen --group dev ruff check .
+uv run --frozen --group dev ruff format --check .
+uv run --frozen --group dev mypy fj_queue.py tests
+pre-commit run --all-files
+```
+
+CI runs the test suite on Python 3.11 to 3.13 plus ruff and mypy, super-linter
+(including Trivy and gitleaks), and OSV-Scanner. Dependencies are updated by
+Dependabot; `uv.lock` holds the exact versions.
+
+## Differences from upstream
+
+- **Running jobs** are shown in the human views (a `Running` table in rich, a
+  `RUNNING` section in plain). The JSON contract is unchanged.
+- **No `--token` flag**; the token comes from `$FORGEJO_TOKEN` or a 1Password
+  `token_ref`.
+- **No `./fj-queue.toml` auto-discovery**, so a config file planted in a
+  cloned repository cannot redirect your token to another host.
+- **Untrusted text is sanitized**: job, runner, and repo names from the server
+  can no longer inject Rich markup or terminal escape sequences.
+- No Homebrew formula or release automation; run it from the checkout.
+
+See [`CHANGELOG.md`](CHANGELOG.md) for details.
+
+## Credits
+
+Originally written by [vtmocanu](https://github.com/vtmocanu). See
+[Homelab Adventures: fj-queue](https://hai.wxs.ro/custom-tools/fj-queue/) for
+the background and design notes.

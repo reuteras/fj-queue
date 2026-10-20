@@ -9,8 +9,7 @@ Exceptions (legitimately contain old values for documentation/history):
   - .venv/ (third-party packages)
   - __pycache__/ (bytecode)
   - .pytest_cache/
-  - .claude/agent-team-tasks/ (internal working notes -- not shipped)
-  - prds/ (PRD documents -- describe old state for context)
+  - .claude/ (local Claude Code settings -- not shipped)
   - README.md, docs/ (M5 scope; documenter-2 cleans these concurrently)
 
 If this test fails ONLY on README.md or docs/, that is expected while M5 is
@@ -31,8 +30,7 @@ EXCLUDED_DIRS = {
     ".venv",
     "__pycache__",
     ".pytest_cache",
-    ".claude",  # agent-team-tasks working notes live here
-    "prds",  # PRD documents legitimately describe old state
+    ".claude",  # local Claude Code settings, if any
 }
 
 # Files excluded from scanning (relative to REPO_ROOT).
