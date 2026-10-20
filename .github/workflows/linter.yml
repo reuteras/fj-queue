@@ -54,6 +54,10 @@ jobs:
           # in test.yml.
           VALIDATE_PYTHON_MYPY: false
           VALIDATE_PYTHON_PYLINT: false
+          # Our pre-commit hooks run ruff/mypy via `uv run`, which is not
+          # available in the super-linter container; ruff/mypy run in
+          # test.yml and gitleaks/markdownlint run as super-linter linters.
+          VALIDATE_PRE_COMMIT: false
           # Super-linter runs ruff with its own template config, ignoring
           # pyproject.toml; ruff runs with the project config in test.yml.
           VALIDATE_PYTHON_RUFF: false
