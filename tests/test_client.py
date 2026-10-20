@@ -34,10 +34,12 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 def _op(stdout="op-secret", stderr="", rc=0, calls=None):
     """Fake subprocess.run for `op read`; records argv + kwargs."""
+
     def run(argv, **kw):
         if calls is not None:
             calls.append((argv, kw))
         return fq.subprocess.CompletedProcess(argv, rc, stdout, stderr)
+
     return run
 
 
@@ -53,9 +55,16 @@ def test_token_env_used(monkeypatch):
 def test_token_env_beats_token_ref():
     def boom(*a, **k):
         raise AssertionError("op must not run when FORGEJO_TOKEN is set")
-    assert fq.resolve_token(
-        "op://V/I/f", env={"FORGEJO_TOKEN": "from-env"}, run=boom, which=boom,
-    ) == "from-env"
+
+    assert (
+        fq.resolve_token(
+            "op://V/I/f",
+            env={"FORGEJO_TOKEN": "from-env"},
+            run=boom,
+            which=boom,
+        )
+        == "from-env"
+    )
 
 
 def test_token_missing_raises_config_error():
@@ -65,16 +74,24 @@ def test_token_missing_raises_config_error():
 
 def test_token_empty_env_falls_through_to_token_ref():
     # Truthy check: FORGEJO_TOKEN="" does not mask token_ref.
-    assert fq.resolve_token(
-        "op://V/I/f", env={"FORGEJO_TOKEN": ""}, run=_op(), which=_which(),
-    ) == "op-secret"
+    assert (
+        fq.resolve_token(
+            "op://V/I/f",
+            env={"FORGEJO_TOKEN": ""},
+            run=_op(),
+            which=_which(),
+        )
+        == "op-secret"
+    )
 
 
 def test_token_ref_runs_op_read_without_shell():
     calls = []
     tok = fq.resolve_token(
-        "op://Private/Forgejo/token", env={},
-        run=_op(stdout="s3cret\n", calls=calls), which=_which(),
+        "op://Private/Forgejo/token",
+        env={},
+        run=_op(stdout="s3cret\n", calls=calls),
+        which=_which(),
     )
     assert tok == "s3cret"
     argv, kw = calls[0]
@@ -83,16 +100,20 @@ def test_token_ref_runs_op_read_without_shell():
     assert kw["timeout"] == fq._OP_TIMEOUT_S
 
 
-@pytest.mark.parametrize("ref", [
-    "Private/Forgejo/token",          # missing scheme
-    "--account=evil op://V/I/f",      # option smuggling
-    "op://V/I/f\nop://X/Y/z",         # control char
-    42,                               # wrong TOML type
-    "",
-])
+@pytest.mark.parametrize(
+    "ref",
+    [
+        "Private/Forgejo/token",  # missing scheme
+        "--account=evil op://V/I/f",  # option smuggling
+        "op://V/I/f\nop://X/Y/z",  # control char
+        42,  # wrong TOML type
+        "",
+    ],
+)
 def test_token_ref_rejects_non_op_references(ref):
     def boom(*a, **k):
         raise AssertionError("op must not run for an invalid reference")
+
     with pytest.raises(fq.ConfigError, match="op://"):
         fq.resolve_token(ref, env={}, run=boom, which=boom)
 
@@ -105,7 +126,8 @@ def test_token_ref_op_missing_from_path():
 def test_token_ref_op_failure_is_config_error_with_sanitized_detail():
     with pytest.raises(fq.ConfigError) as exc:
         fq.resolve_token(
-            "op://V/I/f", env={},
+            "op://V/I/f",
+            env={},
             run=_op(stdout="", stderr="[ERROR] not signed in\x1b[2J", rc=1),
             which=_which(),
         )
@@ -123,6 +145,7 @@ def test_token_ref_empty_secret_rejected():
 def test_token_ref_timeout_is_config_error():
     def slow(argv, **kw):
         raise fq.subprocess.TimeoutExpired(argv, kw["timeout"])
+
     with pytest.raises(fq.ConfigError, match="timed out"):
         fq.resolve_token("op://V/I/f", env={}, run=slow, which=_which())
 
@@ -154,14 +177,19 @@ def test_config_error_exit_code():
 
 def test_metrics_url_arg_beats_env():
     assert (
-        fq.resolve_metrics_url(arg_url="https://arg.example", env={"FJ_QUEUE_METRICS_URL": "https://env.example"})
+        fq.resolve_metrics_url(
+            arg_url="https://arg.example",
+            env={"FJ_QUEUE_METRICS_URL": "https://env.example"},
+        )
         == "https://arg.example"
     )
 
 
 def test_metrics_url_env_used_when_no_arg():
     assert (
-        fq.resolve_metrics_url(arg_url=None, env={"FJ_QUEUE_METRICS_URL": "https://env.example"})
+        fq.resolve_metrics_url(
+            arg_url=None, env={"FJ_QUEUE_METRICS_URL": "https://env.example"}
+        )
         == "https://env.example"
     )
 
@@ -175,14 +203,19 @@ def test_metrics_url_empty_arg_falls_through_to_env():
     # An empty --metrics-url "" must not mask the env var (truthy check,
     # not "is not None"), matching the resolve_token semantics.
     assert (
-        fq.resolve_metrics_url(arg_url="", env={"FJ_QUEUE_METRICS_URL": "https://env.example"})
+        fq.resolve_metrics_url(
+            arg_url="", env={"FJ_QUEUE_METRICS_URL": "https://env.example"}
+        )
         == "https://env.example"
     )
 
 
 def test_metrics_url_empty_env_falls_through_to_default():
     # An empty env value is treated as unset -> default.
-    assert fq.resolve_metrics_url(arg_url=None, env={"FJ_QUEUE_METRICS_URL": ""}) == fq._DEFAULT_METRICS_URL
+    assert (
+        fq.resolve_metrics_url(arg_url=None, env={"FJ_QUEUE_METRICS_URL": ""})
+        == fq._DEFAULT_METRICS_URL
+    )
 
 
 def test_config_repr_masks_token():
@@ -241,12 +274,12 @@ def _cfg() -> fq.Config:
 @respx.mock
 def test_fetch_runners_follows_link_header_across_two_pages():
     """35 runners split 30+5 across two pages via Link: rel=\"next\"."""
-    page1 = [_runner_dict(i) for i in range(1, 31)]    # 30 runners
-    page2 = [_runner_dict(i) for i in range(31, 36)]   # 5 runners
+    page1 = [_runner_dict(i) for i in range(1, 31)]  # 30 runners
+    page2 = [_runner_dict(i) for i in range(31, 36)]  # 5 runners
     next_link = (
-        '<https://git.example.com/api/v1/admin/actions/runners'
+        "<https://git.example.com/api/v1/admin/actions/runners"
         '?limit=50&page=2>; rel="next", '
-        '<https://git.example.com/api/v1/admin/actions/runners'
+        "<https://git.example.com/api/v1/admin/actions/runners"
         '?limit=50&page=2>; rel="last"'
     )
 
@@ -277,8 +310,7 @@ def test_fetch_runners_refuses_cross_host_next_link():
     verbatim). Audit finding M2. Raise SchemaDrift; never follow.
     """
     evil_link = (
-        '<https://attacker.test/api/v1/admin/actions/runners?page=2>; '
-        'rel="next"'
+        '<https://attacker.test/api/v1/admin/actions/runners?page=2>; rel="next"'
     )
     page1 = [_runner_dict(i) for i in range(1, 4)]
 
@@ -296,17 +328,14 @@ def test_fetch_runners_refuses_http_downgrade_next_link():
     base would also leak the bearer token. Refuse.
     """
     downgrade_link = (
-        '<http://git.example.com/api/v1/admin/actions/runners?page=2>; '
-        'rel="next"'
+        '<http://git.example.com/api/v1/admin/actions/runners?page=2>; rel="next"'
     )
     page1 = [_runner_dict(i) for i in range(1, 4)]
 
     respx.get(
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(
-        return_value=httpx.Response(
-            200, json=page1, headers={"Link": downgrade_link}
-        )
+        return_value=httpx.Response(200, json=page1, headers={"Link": downgrade_link})
     )
 
     with fq.Client(_cfg()) as c, pytest.raises(fq.SchemaDrift, match="non-https"):
@@ -364,7 +393,7 @@ def test_fetch_runners_dedupes_runaway_link_loop():
     overlap = [_runner_dict(1), _runner_dict(2), _runner_dict(3)]
     page2 = [_runner_dict(3)]  # duplicate of last item from page1
     next_link = (
-        '<https://git.example.com/api/v1/admin/actions/runners'
+        "<https://git.example.com/api/v1/admin/actions/runners"
         '?limit=50&page=2>; rel="next"'
     )
 
@@ -450,9 +479,9 @@ def test_fetch_jobs_parses_live_shape():
             "status": "waiting",
         },
     ]
-    respx.get(
-        "https://git.example.com/api/v1/admin/actions/runners/jobs"
-    ).mock(return_value=httpx.Response(200, json=body))
+    respx.get("https://git.example.com/api/v1/admin/actions/runners/jobs").mock(
+        return_value=httpx.Response(200, json=body)
+    )
 
     with fq.Client(_cfg()) as c:
         jobs = c.fetch_jobs()
@@ -473,9 +502,9 @@ def test_fetch_jobs_treats_null_payload_as_empty_list():
     the empty list, not raise SchemaDrift. M6 carry-over per PRD #61
     line 165.
     """
-    respx.get(
-        "https://git.example.com/api/v1/admin/actions/runners/jobs"
-    ).mock(return_value=httpx.Response(200, text="null"))
+    respx.get("https://git.example.com/api/v1/admin/actions/runners/jobs").mock(
+        return_value=httpx.Response(200, text="null")
+    )
 
     with fq.Client(_cfg()) as c:
         jobs = c.fetch_jobs()
@@ -490,14 +519,15 @@ def test_fetch_jobs_null_payload_aggregates_to_empty_snapshot_exit_zero():
     of the M1 normalization fix; this asserts the whole pipeline does
     not regress to SchemaDrift on the empty live case.
     """
-    respx.get(
-        "https://git.example.com/api/v1/admin/actions/runners/jobs"
-    ).mock(return_value=httpx.Response(200, text="null"))
+    respx.get("https://git.example.com/api/v1/admin/actions/runners/jobs").mock(
+        return_value=httpx.Response(200, text="null")
+    )
     respx.get(
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(return_value=httpx.Response(200, json=[]))
 
     from datetime import datetime
+
     now = datetime(2026, 5, 28, 12, 0, 0, tzinfo=UTC)
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
@@ -539,9 +569,9 @@ def test_fetch_jobs_tolerates_missing_optional_fields():
             "runs_on": None,
         },
     ]
-    respx.get(
-        "https://git.example.com/api/v1/admin/actions/runners/jobs"
-    ).mock(return_value=httpx.Response(200, json=body))
+    respx.get("https://git.example.com/api/v1/admin/actions/runners/jobs").mock(
+        return_value=httpx.Response(200, json=body)
+    )
 
     with fq.Client(_cfg()) as c:
         jobs = c.fetch_jobs()
@@ -556,9 +586,9 @@ def test_fetch_jobs_tolerates_missing_optional_fields():
 
 @respx.mock
 def test_resolve_repo_404_returns_fallback_label():
-    respx.get(
-        "https://git.example.com/api/v1/repositories/999"
-    ).mock(return_value=httpx.Response(404, json={"message": "not found"}))
+    respx.get("https://git.example.com/api/v1/repositories/999").mock(
+        return_value=httpx.Response(404, json={"message": "not found"})
+    )
 
     with fq.Client(_cfg()) as c:
         slug = c.resolve_repo(999)
@@ -567,9 +597,9 @@ def test_resolve_repo_404_returns_fallback_label():
 
 @respx.mock
 def test_resolve_repo_403_returns_fallback_label():
-    respx.get(
-        "https://git.example.com/api/v1/repositories/777"
-    ).mock(return_value=httpx.Response(403, json={"message": "forbidden"}))
+    respx.get("https://git.example.com/api/v1/repositories/777").mock(
+        return_value=httpx.Response(403, json={"message": "forbidden"})
+    )
 
     with fq.Client(_cfg()) as c:
         slug = c.resolve_repo(777)
@@ -578,9 +608,9 @@ def test_resolve_repo_403_returns_fallback_label():
 
 @respx.mock
 def test_resolve_repo_timeout_returns_fallback_label():
-    respx.get(
-        "https://git.example.com/api/v1/repositories/555"
-    ).mock(side_effect=httpx.TimeoutException("slow"))
+    respx.get("https://git.example.com/api/v1/repositories/555").mock(
+        side_effect=httpx.TimeoutException("slow")
+    )
 
     with fq.Client(_cfg()) as c:
         slug = c.resolve_repo(555)
@@ -589,9 +619,7 @@ def test_resolve_repo_timeout_returns_fallback_label():
 
 @respx.mock
 def test_resolve_repo_success_returns_full_name_and_caches():
-    route = respx.get(
-        "https://git.example.com/api/v1/repositories/589"
-    ).mock(
+    route = respx.get("https://git.example.com/api/v1/repositories/589").mock(
         return_value=httpx.Response(
             200, json={"id": 589, "full_name": "owner-a/repo-a"}
         )
@@ -684,7 +712,7 @@ def test_fetch_runners_pagination_exact_page_size_multiple():
     """
     page1 = [_runner_dict(i) for i in range(1, 51)]  # 50 runners
     next_link = (
-        '<https://git.example.com/api/v1/admin/actions/runners'
+        "<https://git.example.com/api/v1/admin/actions/runners"
         '?limit=50&page=2>; rel="next"'
     )
 
@@ -710,9 +738,9 @@ def test_fetch_runners_pagination_one_over_page_size():
     `if len(page) < limit: stop` would miss the last item.
     """
     page1 = [_runner_dict(i) for i in range(1, 51)]  # 50 runners
-    page2 = [_runner_dict(51)]                       # 1 runner
+    page2 = [_runner_dict(51)]  # 1 runner
     next_link = (
-        '<https://git.example.com/api/v1/admin/actions/runners'
+        "<https://git.example.com/api/v1/admin/actions/runners"
         '?limit=50&page=2>; rel="next"'
     )
 
@@ -745,7 +773,7 @@ def test_fetch_runners_tolerates_missing_optional_fields():
     test_fetch_jobs_tolerates_missing_optional_fields.
     """
     body = [
-        {"id": 100},                                  # bare minimum
+        {"id": 100},  # bare minimum
         {"id": 101, "labels": None, "status": None},  # explicit nulls
         {"id": 102, "name": "anon", "labels": ["grunt"]},
     ]
@@ -773,7 +801,7 @@ def test_fetch_runners_unexpected_status_string_does_not_crash():
         {
             "id": 200,
             "name": "weird",
-            "status": "maintenance",   # not active/idle/offline
+            "status": "maintenance",  # not active/idle/offline
             "version": "v12.7.3",
             "labels": ["grunt"],
             "ephemeral": False,
@@ -857,9 +885,9 @@ def test_fetch_runner_pods_joins_three_queries_by_pod():
     is a float, memory_bytes an int (from the float-as-string), node is
     attached from kube_pod_info. Sorted by pod name.
     """
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=_prom_handler(_prom_fixture()))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=_prom_handler(_prom_fixture())
+    )
 
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert error is None
@@ -884,9 +912,9 @@ def test_fetch_runner_pods_memory_limit_present_cpu_limit_absent():
     memory_limit_bytes field is set for all; cpu_limit_cores is None for
     all (the cpu-limit query returns an empty vector).
     """
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=_prom_handler(_prom_fixture()))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=_prom_handler(_prom_fixture())
+    )
 
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert error is None
@@ -913,9 +941,9 @@ def test_fetch_runner_pods_limit_present_for_cpu_when_set():
             ],
         },
     }
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=_prom_handler(fixture))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=_prom_handler(fixture)
+    )
 
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert error is None
@@ -934,12 +962,12 @@ def test_fetch_runner_pods_pod_missing_from_memory_limit_query_is_none():
     """
     fixture = _prom_fixture()
     # Drop the last pod (pod3) from the memory-limit result.
-    fixture["memory_limit"]["data"]["result"] = (
-        fixture["memory_limit"]["data"]["result"][:2]
+    fixture["memory_limit"]["data"]["result"] = fixture["memory_limit"]["data"][
+        "result"
+    ][:2]
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=_prom_handler(fixture)
     )
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=_prom_handler(fixture))
 
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert error is None
@@ -960,9 +988,9 @@ def test_fetch_runner_pods_no_auth_header_sent_to_prometheus():
         seen.append(request.headers.get("authorization"))
         return _prom_handler(_prom_fixture())(request)
 
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=handler)
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=handler
+    )
 
     fq.fetch_runner_pods(METRICS_URL)
     assert seen, "no prometheus request captured"
@@ -975,9 +1003,9 @@ def test_fetch_runner_pods_node_prefix_green_filters_pods():
     fixture = _prom_fixture()
     # Repoint one pod onto a node that does NOT start with node-a-.
     fixture["info"]["data"]["result"][2]["metric"]["node"] = "node-b-1"
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=_prom_handler(fixture))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=_prom_handler(fixture)
+    )
 
     green, gerr = fq.fetch_runner_pods(METRICS_URL, node_prefix="node-a-")
     assert gerr is None
@@ -993,9 +1021,9 @@ def test_fetch_runner_pods_node_prefix_blue_filters_pods():
     """node_prefix='node-b-' keeps only pods on nodes starting with that prefix."""
     fixture = _prom_fixture()
     fixture["info"]["data"]["result"][2]["metric"]["node"] = "node-b-1"
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=_prom_handler(fixture))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=_prom_handler(fixture)
+    )
 
     blue, berr = fq.fetch_runner_pods(METRICS_URL, node_prefix="node-b-")
     assert berr is None
@@ -1007,9 +1035,9 @@ def test_fetch_runner_pods_empty_node_prefix_applies_no_filter():
     """Empty node_prefix (the default) keeps all pods."""
     fixture = _prom_fixture()
     fixture["info"]["data"]["result"][2]["metric"]["node"] = "node-b-1"
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=_prom_handler(fixture))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=_prom_handler(fixture)
+    )
 
     pods, error = fq.fetch_runner_pods(METRICS_URL, node_prefix="")
     assert error is None
@@ -1025,9 +1053,9 @@ def test_fetch_runner_pods_passes_namespace_into_queries():
         captured.append(request.url.params.get("query", ""))
         return _prom_handler(_prom_fixture())(request)
 
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=handler)
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=handler
+    )
 
     fq.fetch_runner_pods(METRICS_URL, namespace="ci-runners")
     assert captured
@@ -1036,9 +1064,9 @@ def test_fetch_runner_pods_passes_namespace_into_queries():
 
 @respx.mock
 def test_fetch_runner_pods_http_500_is_graceful():
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(return_value=httpx.Response(500, text="boom"))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        return_value=httpx.Response(500, text="boom")
+    )
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert pods == ()
     assert error is not None and "500" in error
@@ -1046,9 +1074,9 @@ def test_fetch_runner_pods_http_500_is_graceful():
 
 @respx.mock
 def test_fetch_runner_pods_timeout_is_graceful():
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=httpx.TimeoutException("slow"))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=httpx.TimeoutException("slow")
+    )
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert pods == ()
     assert error is not None and "timeout" in error.lower()
@@ -1056,9 +1084,9 @@ def test_fetch_runner_pods_timeout_is_graceful():
 
 @respx.mock
 def test_fetch_runner_pods_connection_refused_is_graceful():
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=httpx.ConnectError("refused"))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=httpx.ConnectError("refused")
+    )
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert pods == ()
     assert error is not None
@@ -1066,9 +1094,9 @@ def test_fetch_runner_pods_connection_refused_is_graceful():
 
 @respx.mock
 def test_fetch_runner_pods_malformed_body_is_graceful():
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(return_value=httpx.Response(200, text="not json{{"))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        return_value=httpx.Response(200, text="not json{{")
+    )
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert pods == ()
     assert error is not None
@@ -1076,9 +1104,7 @@ def test_fetch_runner_pods_malformed_body_is_graceful():
 
 @respx.mock
 def test_fetch_runner_pods_status_not_success_is_graceful():
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
         return_value=httpx.Response(
             200, json={"status": "error", "errorType": "bad_data"}
         )
@@ -1094,9 +1120,9 @@ def test_fetch_runner_pods_empty_vectors_returns_no_pods_no_error():
     error: empty pods, error None.
     """
     empty = {"status": "success", "data": {"resultType": "vector", "result": []}}
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(return_value=httpx.Response(200, json=empty))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        return_value=httpx.Response(200, json=empty)
+    )
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert pods == ()
     assert error is None
@@ -1112,7 +1138,8 @@ def _scalar_response(value):
     """A Prometheus scalar-vector response, or an empty vector for None."""
     result = [] if value is None else [{"metric": {}, "value": [1.0, str(value)]}]
     return httpx.Response(
-        200, json={"status": "success", "data": {"resultType": "vector", "result": result}}
+        200,
+        json={"status": "success", "data": {"resultType": "vector", "result": result}},
     )
 
 
@@ -1138,6 +1165,7 @@ def test_fetch_ncps_status_active_from_fixture():
     requests_per_sec > 0. Uses the committed fixture's active sample.
     """
     fixture = _prom_fixture()
+
     def handler(request: httpx.Request) -> httpx.Response:
         q = request.url.params.get("query", "")
         if "request_duration_millis_milliseconds_count" in q:
@@ -1294,10 +1322,16 @@ def test_safe_text_replaces_control_and_bidi_chars():
 
 
 def test_normalize_job_sanitizes_server_strings():
-    job = fq._normalize_job({
-        "id": 1, "name": "x\x1b[2Jy", "status": "waiting",
-        "runs_on": ["a\x1bb"], "needs": ["n\x07"], "handle": "h\x00",
-    })
+    job = fq._normalize_job(
+        {
+            "id": 1,
+            "name": "x\x1b[2Jy",
+            "status": "waiting",
+            "runs_on": ["a\x1bb"],
+            "needs": ["n\x07"],
+            "handle": "h\x00",
+        }
+    )
     assert job.name == "x?[2Jy"
     assert job.runs_on == ("a?b",)
     assert job.needs == ("n?",)
@@ -1305,10 +1339,15 @@ def test_normalize_job_sanitizes_server_strings():
 
 
 def test_normalize_runner_sanitizes_server_strings():
-    r = fq._normalize_runner({
-        "id": 1, "name": "r\x1b", "status": "idle",
-        "version": "v\x9b", "labels": ["l\u2066"],
-    })
+    r = fq._normalize_runner(
+        {
+            "id": 1,
+            "name": "r\x1b",
+            "status": "idle",
+            "version": "v\x9b",
+            "labels": ["l\u2066"],
+        }
+    )
     assert (r.name, r.version, r.labels) == ("r?", "v?", ("l?",))
 
 

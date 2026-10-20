@@ -171,11 +171,7 @@ class Config:
     # downstream layers will -- fix at the source while it is cheap.
     def __repr__(self) -> str:
         masked = "***" if self.token else ""
-        return (
-            f"Config(host={self.host!r}, "
-            f"token={masked!r}, "
-            f"timeout={self.timeout})"
-        )
+        return f"Config(host={self.host!r}, token={masked!r}, timeout={self.timeout})"
 
     __str__ = __repr__
 
@@ -223,7 +219,7 @@ def _read_op_secret(
     ):
         raise ConfigError(
             f"token_ref must be a 1Password secret reference starting with "
-            f"{OP_REF_PREFIX!r} (e.g. \"op://Private/Forgejo/token\")"
+            f'{OP_REF_PREFIX!r} (e.g. "op://Private/Forgejo/token")'
         )
     op = (which or shutil.which)("op")
     if not op:
@@ -241,8 +237,7 @@ def _read_op_secret(
         )
     except subprocess.TimeoutExpired as e:
         raise ConfigError(
-            f"`op read` timed out after {_OP_TIMEOUT_S:.0f}s "
-            "(is 1Password unlocked?)"
+            f"`op read` timed out after {_OP_TIMEOUT_S:.0f}s (is 1Password unlocked?)"
         ) from e
     except OSError as e:
         raise ConfigError(f"could not run `op`: {e.strerror or e}") from e
@@ -250,9 +245,7 @@ def _read_op_secret(
         # op's stderr describes the failure (not signed in, item not
         # found); it never contains the secret. Sanitize + truncate.
         detail = _safe_text((proc.stderr or "").strip())[:200] or "no output"
-        raise ConfigError(
-            f"`op read` failed (exit {proc.returncode}): {detail}"
-        )
+        raise ConfigError(f"`op read` failed (exit {proc.returncode}): {detail}")
     secret = (proc.stdout or "").strip()
     if not secret:
         raise ConfigError("`op read` returned an empty secret for token_ref")
@@ -505,9 +498,7 @@ class RawJob:
 # repo writer names jobs. Unfiltered, ESC sequences reach the terminal
 # (OSC 52 clipboard writes, OSC 8 links, cursor moves that redraw rows)
 # and bidi overrides can visually reorder text.
-_UNSAFE_TEXT_RE = re.compile(
-    "[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]"
-)
+_UNSAFE_TEXT_RE = re.compile("[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]")
 
 
 def _safe_text(value: object) -> str:
@@ -615,7 +606,7 @@ def _enforce_same_host(next_url: str, expected_host: str) -> str:
     cfg_host = cfg_host.rstrip("/").split("/", 1)[0]
     if next_host.lower() != cfg_host:
         raise SchemaDrift(
-            f"refusing to follow cross-host Link: rel=\"next\" "
+            f'refusing to follow cross-host Link: rel="next" '
             f"(host={next_host!r}, expected={cfg_host!r}); "
             f"would leak Authorization header"
         )
@@ -623,7 +614,7 @@ def _enforce_same_host(next_url: str, expected_host: str) -> str:
     # link, treat that as a leak risk too.
     if parts.scheme and parts.scheme != "https":
         raise SchemaDrift(
-            f"refusing to follow non-https Link: rel=\"next\" "
+            f'refusing to follow non-https Link: rel="next" '
             f"(scheme={parts.scheme!r}); would leak Authorization header"
         )
     return next_url
@@ -670,9 +661,7 @@ class Client:
                 # ends up empty (violates the PRD JSON-contract
                 # guarantee that even failures emit a JSON envelope),
                 # and the exit code is 1 instead of the typed 2.
-                raise ConfigError(
-                    f"invalid --host {config.host!r}: {e}"
-                ) from e
+                raise ConfigError(f"invalid --host {config.host!r}: {e}") from e
         self._http = http
         self._repo_cache: dict[int, str] = {}
 
@@ -695,9 +684,7 @@ class Client:
         except httpx.TimeoutException as e:
             raise ConnectionError(f"timeout calling {url_or_path}") from e
         except httpx.HTTPError as e:
-            raise ConnectionError(
-                f"connection error calling {url_or_path}: {e}"
-            ) from e
+            raise ConnectionError(f"connection error calling {url_or_path}: {e}") from e
 
         if r.status_code == 401:
             raise AuthError("401 unauthorized: check FORGEJO_TOKEN / token_ref")
@@ -709,9 +696,7 @@ class Client:
         if r.status_code == 429:
             raise ConnectionError(f"429 rate-limited by {self.config.host}")
         if 500 <= r.status_code < 600:
-            raise ConnectionError(
-                f"{r.status_code} server error on {url_or_path}"
-            )
+            raise ConnectionError(f"{r.status_code} server error on {url_or_path}")
         if r.status_code >= 400:
             # Intentionally NO body fragment here: the server-controlled
             # response body is an unbounded surface that flows into
@@ -743,8 +728,7 @@ class Client:
         runners: list[Runner] = []
         seen_ids: set[int] = set()
         next_path: str | None = (
-            f"/api/v1/admin/actions/runners"
-            f"?limit={_RUNNER_PAGE_SIZE}&page=1"
+            f"/api/v1/admin/actions/runners?limit={_RUNNER_PAGE_SIZE}&page=1"
         )
         pages = 0
         while next_path:
@@ -758,13 +742,14 @@ class Client:
             # Forgejo returns a bare list (verified live). Tolerate an
             # enveloped {"runners": [...]} shape too in case a future
             # version adds one.
-            items = body if isinstance(body, list) else (
-                body.get("runners") if isinstance(body, dict) else None
+            items = (
+                body
+                if isinstance(body, list)
+                else (body.get("runners") if isinstance(body, dict) else None)
             )
             if items is None:
                 raise SchemaDrift(
-                    f"unexpected runners payload shape: "
-                    f"{type(body).__name__}"
+                    f"unexpected runners payload shape: {type(body).__name__}"
                 )
             for raw in items:
                 if not isinstance(raw, dict):
@@ -779,9 +764,7 @@ class Client:
             raw_next = _parse_next_link(r.headers.get("link"))
             # Trust-boundary check: refuse to send the admin token off-host.
             next_path = (
-                _enforce_same_host(raw_next, self.config.host)
-                if raw_next
-                else None
+                _enforce_same_host(raw_next, self.config.host) if raw_next else None
             )
             pages += 1
             if pages > _RUNNER_PAGE_CAP:
@@ -802,19 +785,17 @@ class Client:
         # empty list per the wire contract, NOT as a schema break.
         if body is None:
             return []
-        items = body if isinstance(body, list) else (
-            body.get("jobs") if isinstance(body, dict) else None
+        items = (
+            body
+            if isinstance(body, list)
+            else (body.get("jobs") if isinstance(body, dict) else None)
         )
         if items is None:
-            raise SchemaDrift(
-                f"unexpected jobs payload shape: {type(body).__name__}"
-            )
+            raise SchemaDrift(f"unexpected jobs payload shape: {type(body).__name__}")
         out: list[RawJob] = []
         for raw in items:
             if not isinstance(raw, dict):
-                raise SchemaDrift(
-                    f"job item not an object: {type(raw).__name__}"
-                )
+                raise SchemaDrift(f"job item not an object: {type(raw).__name__}")
             out.append(_normalize_job(raw))
         return out
 
@@ -971,11 +952,11 @@ NCPS_DISABLED = "disabled"
 # the query and the JSON `metrics.rate_window` can never drift apart.
 # `{ns}` stays a str.format placeholder (filled per call).
 _PROM_CPU_QUERY = (
-    'sum by (pod) (rate(container_cpu_usage_seconds_total'
-    '{{namespace="{ns}", container!=""}}[' + _PROM_RATE_WINDOW + ']))'
+    "sum by (pod) (rate(container_cpu_usage_seconds_total"
+    '{{namespace="{ns}", container!=""}}[' + _PROM_RATE_WINDOW + "]))"
 )
 _PROM_MEM_QUERY = (
-    'sum by (pod) (container_memory_working_set_bytes'
+    "sum by (pod) (container_memory_working_set_bytes"
     '{{namespace="{ns}", container!=""}})'
 )
 _PROM_INFO_QUERY = 'kube_pod_info{{namespace="{ns}"}}'
@@ -983,11 +964,11 @@ _PROM_INFO_QUERY = 'kube_pod_info{{namespace="{ns}"}}'
 # ARE set (~17.4 GiB/pod); CPU limits are NOT (the cpu query returns no
 # series), so the cpu-limit map is typically empty -> cpu_limit_cores=None.
 _PROM_MEM_LIMIT_QUERY = (
-    'sum by (pod) (kube_pod_container_resource_limits'
+    "sum by (pod) (kube_pod_container_resource_limits"
     '{{namespace="{ns}", resource="memory"}})'
 )
 _PROM_CPU_LIMIT_QUERY = (
-    'sum by (pod) (kube_pod_container_resource_limits'
+    "sum by (pod) (kube_pod_container_resource_limits"
     '{{namespace="{ns}", resource="cpu"}})'
 )
 
@@ -1130,15 +1111,11 @@ def fetch_runner_pods(
             _prom_query_vector(client, _PROM_INFO_QUERY.format(ns=namespace)),
         )
         mem_limit_by_pod = _prom_scalar_by_pod(
-            _prom_query_vector(
-                client, _PROM_MEM_LIMIT_QUERY.format(ns=namespace)
-            ),
+            _prom_query_vector(client, _PROM_MEM_LIMIT_QUERY.format(ns=namespace)),
             lambda v: int(float(v)),
         )
         cpu_limit_by_pod = _prom_scalar_by_pod(
-            _prom_query_vector(
-                client, _PROM_CPU_LIMIT_QUERY.format(ns=namespace)
-            ),
+            _prom_query_vector(client, _PROM_CPU_LIMIT_QUERY.format(ns=namespace)),
             float,
         )
 
@@ -1209,13 +1186,13 @@ _NCPS_RATE_WINDOW = "2m"
 # rate window is interpolated from _NCPS_RATE_WINDOW (single source of
 # truth, same pattern as _PROM_CPU_QUERY).
 _NCPS_REQUESTS_QUERY = (
-    'sum(rate(request_duration_millis_milliseconds_count'
-    '{job="ncps"}[' + _NCPS_RATE_WINDOW + ']))'
+    "sum(rate(request_duration_millis_milliseconds_count"
+    '{job="ncps"}[' + _NCPS_RATE_WINDOW + "]))"
 )
 _NCPS_INFLIGHT_QUERY = 'sum(requests_inflight{job="ncps"})'
 _NCPS_UPSTREAM_QUERY = (
-    'sum(rate(http_client_request_duration_seconds_count'
-    '{job="ncps"}[' + _NCPS_RATE_WINDOW + ']))'
+    "sum(rate(http_client_request_duration_seconds_count"
+    '{job="ncps"}[' + _NCPS_RATE_WINDOW + "]))"
 )
 # Throughput = the NCPS pod's network egress (cAdvisor), NOT
 # response_size_bytes_sum: NCPS doesn't record sizes for streamed nar
@@ -1223,8 +1200,8 @@ _NCPS_UPSTREAM_QUERY = (
 # nars (a cache miss's upstream download lands on RECEIVE, not transmit).
 # This metric is keyed by namespace="ncps" (it has NO job="ncps" label).
 _NCPS_BYTES_QUERY = (
-    'sum(rate(container_network_transmit_bytes_total'
-    '{namespace="ncps"}[' + _NCPS_RATE_WINDOW + ']))'
+    "sum(rate(container_network_transmit_bytes_total"
+    '{namespace="ncps"}[' + _NCPS_RATE_WINDOW + "]))"
 )
 
 
@@ -1659,8 +1636,7 @@ def aggregate(
         # M3's JSON envelope. Surface the mistake at the boundary, not
         # in a downstream test failure.
         raise ValueError(
-            "aggregate(now=...) MUST be timezone-aware (UTC); "
-            "got a naive datetime"
+            "aggregate(now=...) MUST be timezone-aware (UTC); got a naive datetime"
         )
 
     runners_tuple: tuple[Runner, ...] = tuple(
@@ -1718,9 +1694,7 @@ def aggregate(
             repo_id=per_repo_id[slug],
             running=per_repo_running.get(slug, 0),
             waiting=per_repo_waiting.get(slug, 0),
-            total=(
-                per_repo_running.get(slug, 0) + per_repo_waiting.get(slug, 0)
-            ),
+            total=(per_repo_running.get(slug, 0) + per_repo_waiting.get(slug, 0)),
         )
         for slug in per_repo_slugs
     )
@@ -1795,8 +1769,7 @@ def aggregate(
                     repo=slug,
                     runs_on=j.runs_on,
                     message=(
-                        f"No online runner can satisfy runs_on: "
-                        f"{list(j.runs_on)}"
+                        f"No online runner can satisfy runs_on: {list(j.runs_on)}"
                     ),
                 )
             )
@@ -1821,9 +1794,7 @@ def aggregate(
     # Sort key includes code so a job carrying two warning rows (cannot
     # happen today, but additive codes may overlap later) stays
     # byte-deterministic on the wire.
-    warnings_tuple = tuple(
-        sorted(warnings_list, key=lambda w: (w.job_id, w.code))
-    )
+    warnings_tuple = tuple(sorted(warnings_list, key=lambda w: (w.job_id, w.code)))
 
     return Snapshot(
         as_of=now,
@@ -2266,24 +2237,16 @@ def render_plain(snap: Snapshot) -> str:
 
     # Header.
     as_of = _rfc3339_utc_z(snap.as_of)
-    lines.append(
-        f"fj-queue v{snap.tool_version}  as_of={as_of}  host={snap.host}"
-    )
+    lines.append(f"fj-queue v{snap.tool_version}  as_of={as_of}  host={snap.host}")
     f_repo = snap.filter_repo if snap.filter_repo else "-"
-    f_label = (
-        _format_str_list(snap.filter_label) if snap.filter_label else "-"
-    )
+    f_label = _format_str_list(snap.filter_label) if snap.filter_label else "-"
     lines.append(f"  filter: repo={f_repo}  label={f_label}")
-    lines.append(
-        f"  schedulable_labels: {_format_str_list(snap.schedulable_labels)}"
-    )
+    lines.append(f"  schedulable_labels: {_format_str_list(snap.schedulable_labels)}")
     lines.append("")
 
     # Totals (always present; PRD success-criterion "exit 0 on empty").
     t = snap.totals
-    lines.append(
-        f"TOTALS: running={t.running}  waiting={t.waiting}  total={t.total}"
-    )
+    lines.append(f"TOTALS: running={t.running}  waiting={t.waiting}  total={t.total}")
     lines.append("")
 
     # Runners.
@@ -2305,13 +2268,9 @@ def render_plain(snap: Snapshot) -> str:
         # Intentional opt-out (default), not a failure: read as such.
         lines.append("RUNNER RESOURCES: disabled")
     elif snap.metrics_error is not None:
-        lines.append(
-            f"RUNNER RESOURCES: unavailable ({snap.metrics_error})"
-        )
+        lines.append(f"RUNNER RESOURCES: unavailable ({snap.metrics_error})")
     else:
-        lines.append(
-            f"RUNNER RESOURCES (per pod, {len(snap.runner_pods)}):"
-        )
+        lines.append(f"RUNNER RESOURCES (per pod, {len(snap.runner_pods)}):")
         if not snap.runner_pods:
             lines.append("  (none)")
         else:
@@ -2320,8 +2279,7 @@ def render_plain(snap: Snapshot) -> str:
                 cpu_cell = _fmt_cpu_cell(p.cpu_cores, p.cpu_limit_cores, dash="-")
                 mem_cell = _fmt_mem_cell(p.memory_bytes, p.memory_limit_bytes, dash="-")
                 lines.append(
-                    f"  {p.pod:<40} node={p.node:<14} "
-                    f"cpu={cpu_cell}  mem={mem_cell}"
+                    f"  {p.pod:<40} node={p.node:<14} cpu={cpu_cell}  mem={mem_cell}"
                 )
     lines.append("")
 
@@ -2353,11 +2311,10 @@ def render_plain(snap: Snapshot) -> str:
             lines.append(
                 f"  job_id={rj.job_id}  task_id={task}  "
                 f"repo={rj.repo}  "
-                f"name=\"{rj.job_name}\""
+                f'name="{rj.job_name}"'
             )
             lines.append(
-                f"        attempt={rj.attempt}  "
-                f"runs_on={_format_str_list(rj.runs_on)}"
+                f"        attempt={rj.attempt}  runs_on={_format_str_list(rj.runs_on)}"
             )
     lines.append("")
 
@@ -2373,7 +2330,7 @@ def render_plain(snap: Snapshot) -> str:
                 f"[{reason:<19}] "
                 f"job_id={j.job_id}  "
                 f"repo={j.repo}  "
-                f"name=\"{j.job_name}\""
+                f'name="{j.job_name}"'
             )
             # Indented secondary line so grep on `job_id=` still hits.
             lines.append(
@@ -2428,7 +2385,9 @@ def render_rich(snap: Snapshot):
     header_text.append(f"@ {snap.host}", style="cyan")
     header_text.append(f"   as_of={_rfc3339_utc_z(snap.as_of)}\n", style="dim")
     header_text.append("runners: ", style="bold")
-    header_text.append(f"{online} online / {n_runners}", style="green" if online else "red")
+    header_text.append(
+        f"{online} online / {n_runners}", style="green" if online else "red"
+    )
     header_text.append("    totals: ", style="bold")
     header_text.append(f"running={t.running}  waiting={t.waiting}  total={t.total}")
     if snap.filter_repo or snap.filter_label:
@@ -2440,9 +2399,7 @@ def render_rich(snap: Snapshot):
         )
     if snap.schedulable_labels:
         header_text.append("\nschedulable_labels: ", style="bold")
-        header_text.append(
-            _format_str_list(snap.schedulable_labels), style="cyan"
-        )
+        header_text.append(_format_str_list(snap.schedulable_labels), style="cyan")
     sections.append(Panel(header_text, title="snapshot", expand=False))
 
     # --- Runners table -----------------------------------------------
@@ -2458,8 +2415,7 @@ def render_rich(snap: Snapshot):
     else:
         for r in snap.runners:
             online_cell = (
-                Text("yes", style="green") if is_online(r)
-                else Text("no", style="red")
+                Text("yes", style="green") if is_online(r) else Text("no", style="red")
             )
             # Three-way visual distinction (online operators want to see
             # active vs idle at a glance without breaking the
@@ -2489,9 +2445,7 @@ def render_rich(snap: Snapshot):
     # degrades gracefully rather than showing an empty/blank section.
     if snap.metrics_error == METRICS_DISABLED:
         # Intentional opt-out (default), not a failure: read as such.
-        sections.append(
-            Text("Runner resources: disabled", style="dim")
-        )
+        sections.append(Text("Runner resources: disabled", style="dim"))
     elif snap.metrics_error is not None:
         sections.append(
             Text(
@@ -2500,9 +2454,7 @@ def render_rich(snap: Snapshot):
             )
         )
     else:
-        mt = Table(
-            title="Runner resources (per pod)", show_lines=False, expand=False
-        )
+        mt = Table(title="Runner resources (per pod)", show_lines=False, expand=False)
         mt.add_column("pod", style="bold")
         mt.add_column("node")
         mt.add_column("cpu (cores)", justify="right", style="green")
@@ -2566,7 +2518,8 @@ def render_rich(snap: Snapshot):
         for rj in snap.running:
             attempt_cell = (
                 Text(f"{rj.attempt} (rerun)", style="red")
-                if rj.attempt > 1 else Text(str(rj.attempt))
+                if rj.attempt > 1
+                else Text(str(rj.attempt))
             )
             rjt.add_row(
                 str(rj.job_id),
@@ -2599,11 +2552,13 @@ def render_rich(snap: Snapshot):
             }.get(j.blocked_reason or "", "")
             reason_cell = (
                 Text(j.blocked_reason, style=reason_style)
-                if j.blocked_reason else Text("-", style="dim")
+                if j.blocked_reason
+                else Text("-", style="dim")
             )
             attempt_cell = (
                 Text(f"{j.attempt} (rerun)", style="red")
-                if j.attempt > 1 else Text(str(j.attempt))
+                if j.attempt > 1
+                else Text(str(j.attempt))
             )
             qt.add_row(
                 str(j.position),
@@ -2755,6 +2710,7 @@ def _watch_renderable(
     """
     if format_mode == "plain":
         from rich.text import Text
+
         plain = render_plain(snap)
         if stale_marker is None:
             return Text(plain, no_wrap=False)
@@ -2816,12 +2772,10 @@ def _scope_snapshot_queue(
     if filter_repo is None and not filter_label:
         return snap
     scoped_queue = tuple(
-        j for j in snap.queue
-        if _job_matches_filters(j, filter_repo, filter_label)
+        j for j in snap.queue if _job_matches_filters(j, filter_repo, filter_label)
     )
     scoped_running = tuple(
-        j for j in snap.running
-        if _job_matches_filters(j, filter_repo, filter_label)
+        j for j in snap.running if _job_matches_filters(j, filter_repo, filter_label)
     )
     return replace(snap, queue=scoped_queue, running=scoped_running)
 
@@ -3091,9 +3045,7 @@ def run_watch(
                         raise
                     # last_good_at is non-None whenever last_good is.
                     assert last_good_at is not None
-                    stale_marker = _format_stale_marker(
-                        last_good_at, interval
-                    )
+                    stale_marker = _format_stale_marker(last_good_at, interval)
                     snap_to_render = last_good
                 else:
                     last_good = snap
@@ -3162,7 +3114,7 @@ def _build_parser():
             "order, and unschedulable-job warnings."
         ),
         epilog=(
-            "Token: $FORGEJO_TOKEN, else token_ref = \"op://...\" in the "
+            'Token: $FORGEJO_TOKEN, else token_ref = "op://..." in the '
             "config file (read via the 1Password CLI). Needs admin scope. "
             "Exit codes: 0 ok, 2 usage, 3 auth (401/403), 4 "
             "connection/timeout/5xx/429, 5 schema drift, 130 interrupted."
@@ -3304,8 +3256,7 @@ def _build_parser():
         dest="ncps",
         action="store_const",
         const=False,
-        help="explicitly disable NCPS cache-status display "
-        "(overrides config file).",
+        help="explicitly disable NCPS cache-status display (overrides config file).",
     )
     parser.add_argument(
         "--schema",
@@ -3327,9 +3278,7 @@ def _resolve_mode(args, *, is_tty: bool, stderr) -> str:
     """
     if args.format == "json":
         if args.mode == "watch":
-            stderr.write(
-                "fj-queue: --format json forces --once; ignoring --watch\n"
-            )
+            stderr.write("fj-queue: --format json forces --once; ignoring --watch\n")
         return "once"
     if args.mode is not None:
         return args.mode
@@ -3345,9 +3294,7 @@ def _emit_error(exc, *, host: str, fmt: str, token: str | None, stdout, stderr) 
     """
     msg = _scrub_token(str(exc) or exc.__class__.__name__, token)
     if fmt == "json":
-        stdout.write(
-            render_json_error(exc, host=host, scrub_token=token) + "\n"
-        )
+        stdout.write(render_json_error(exc, host=host, scrub_token=token) + "\n")
     stderr.write(f"fj-queue: {msg}\n")
     return exit_code_for(exc)
 
@@ -3375,8 +3322,12 @@ def _run_once(config: Config, args, labels, *, client, stdout, stderr) -> int:
                 c.close()
     except FjQueueError as e:
         return _emit_error(
-            e, host=config.host, fmt=fmt, token=config.token,
-            stdout=stdout, stderr=stderr,
+            e,
+            host=config.host,
+            fmt=fmt,
+            token=config.token,
+            stdout=stdout,
+            stderr=stderr,
         )
 
     if fmt == "json":
@@ -3385,6 +3336,7 @@ def _run_once(config: Config, args, labels, *, client, stdout, stderr) -> int:
         stdout.write(render_plain(snap) + "\n")
     else:
         from rich.console import Console
+
         Console(file=stdout).print(render_rich(snap))
     return EXIT_OK
 
@@ -3424,8 +3376,12 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
         file_config = load_file_config(args.config)
     except ConfigError as e:
         return _emit_error(
-            e, host=args.host or "", fmt=args.format, token=None,
-            stdout=out, stderr=err,
+            e,
+            host=args.host or "",
+            fmt=args.format,
+            token=None,
+            stdout=out,
+            stderr=err,
         )
 
     # Token resolution: a missing token is a usage error (exit 2).
@@ -3435,8 +3391,12 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
         return _emit_error(
             # host may not be resolved yet; pass the raw flag value (or
             # an empty string) so the error envelope stays schema-valid.
-            e, host=args.host or "", fmt=args.format, token=None,
-            stdout=out, stderr=err,
+            e,
+            host=args.host or "",
+            fmt=args.format,
+            token=None,
+            stdout=out,
+            stderr=err,
         )
 
     # Host resolution: a missing host is a usage error (exit 2).
@@ -3444,8 +3404,12 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
         host = resolve_host(args.host, config_value=file_config.get("host"))
     except ConfigError as e:
         return _emit_error(
-            e, host="", fmt=args.format, token=None,
-            stdout=out, stderr=err,
+            e,
+            host="",
+            fmt=args.format,
+            token=None,
+            stdout=out,
+            stderr=err,
         )
 
     # Metrics config: CLI flags > config file [metrics] section > defaults.
@@ -3455,7 +3419,7 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
     if args.metrics is True:
         metrics_enabled = True
     elif args.metrics is False:
-        metrics_enabled = False       # explicit --no-metrics
+        metrics_enabled = False  # explicit --no-metrics
     else:
         metrics_enabled = bool(metrics_section.get("enabled", False))
 
@@ -3465,9 +3429,7 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
         config_value=metrics_section.get("url", ""),
     )
     metrics_namespace = (
-        args.metrics_namespace
-        or metrics_section.get("namespace", "")
-        or "ci-runners"
+        args.metrics_namespace or metrics_section.get("namespace", "") or "ci-runners"
     )
     metrics_node_prefix = (
         args.node_prefix
@@ -3482,7 +3444,7 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
     if args.ncps is True:
         ncps_enabled = True
     elif args.ncps is False:
-        ncps_enabled = False       # explicit --no-ncps
+        ncps_enabled = False  # explicit --no-ncps
     else:
         ncps_enabled = bool(ncps_section.get("enabled", False))
 
@@ -3495,8 +3457,11 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
                 "Supply one via --metrics-url, $FJ_QUEUE_METRICS_URL, "
                 "or [metrics] url in the config file."
             ),
-            host=host, fmt=args.format, token=None,
-            stdout=out, stderr=err,
+            host=host,
+            fmt=args.format,
+            token=None,
+            stdout=out,
+            stderr=err,
         )
 
     config = Config(
@@ -3514,6 +3479,7 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
     if mode == "watch":
         try:
             from rich.console import Console
+
             console = Console(file=out)
             return run_watch(
                 config,
@@ -3526,8 +3492,12 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
             )
         except FjQueueError as e:
             return _emit_error(
-                e, host=config.host, fmt=args.format, token=config.token,
-                stdout=out, stderr=err,
+                e,
+                host=config.host,
+                fmt=args.format,
+                token=config.token,
+                stdout=out,
+                stderr=err,
             )
 
     return _run_once(config, args, labels, client=client, stdout=out, stderr=err)

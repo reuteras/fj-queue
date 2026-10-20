@@ -142,10 +142,10 @@ def _make_multi_repo_snapshot():
         _runner(2, status="offline", labels=("special",)),
     ]
     jobs = [
-        _job(10, repo_id=85, runs_on=("grunt",)),                 # pos 1
-        _job(20, repo_id=99, runs_on=("special",)),               # pos 2
-        _job(30, repo_id=85, runs_on=("grunt", "docker")),        # pos 3
-        _job(40, repo_id=99, runs_on=("grunt",)),                 # pos 4
+        _job(10, repo_id=85, runs_on=("grunt",)),  # pos 1
+        _job(20, repo_id=99, runs_on=("special",)),  # pos 2
+        _job(30, repo_id=85, runs_on=("grunt", "docker")),  # pos 3
+        _job(40, repo_id=99, runs_on=("grunt",)),  # pos 4
         _job(50, status="running", repo_id=42, runs_on=("grunt",)),
     ]
     repo_names = {85: "alpha/repo", 99: "beta/repo", 42: "running/repo"}
@@ -160,9 +160,7 @@ def test_scope_returns_input_when_no_filter():
 
 def test_scope_repo_keeps_only_matching_queue_entries():
     snap = _make_multi_repo_snapshot()
-    scoped = fq._scope_snapshot_queue(
-        snap, filter_repo="alpha/repo", filter_label=()
-    )
+    scoped = fq._scope_snapshot_queue(snap, filter_repo="alpha/repo", filter_label=())
     assert tuple(j.job_id for j in scoped.queue) == (10, 30)
     # Other top-level fields untouched.
     assert scoped.totals == snap.totals
@@ -177,9 +175,7 @@ def test_scope_preserves_global_positions_with_gaps():
     the unfiltered waiting set. Gaps are intentional.
     """
     snap = _make_multi_repo_snapshot()
-    scoped = fq._scope_snapshot_queue(
-        snap, filter_repo="alpha/repo", filter_label=()
-    )
+    scoped = fq._scope_snapshot_queue(snap, filter_repo="alpha/repo", filter_label=())
     positions = [j.position for j in scoped.queue]
     assert positions == [1, 3]  # NOT [1, 2]
 
@@ -190,9 +186,7 @@ def test_scope_label_subset_semantics():
     """
     snap = _make_multi_repo_snapshot()
     # `grunt` alone keeps jobs 10, 30, 40 (positions 1, 3, 4).
-    scoped = fq._scope_snapshot_queue(
-        snap, filter_repo=None, filter_label=("grunt",)
-    )
+    scoped = fq._scope_snapshot_queue(snap, filter_repo=None, filter_label=("grunt",))
     assert tuple(j.job_id for j in scoped.queue) == (10, 30, 40)
     assert [j.position for j in scoped.queue] == [1, 3, 4]
 
@@ -228,9 +222,7 @@ def test_scope_warnings_remain_instance_wide():
     # Pre-condition: warning exists for stuck/repo.
     assert any(w.repo == "stuck/repo" for w in snap.warnings)
 
-    scoped = fq._scope_snapshot_queue(
-        snap, filter_repo="alpha/repo", filter_label=()
-    )
+    scoped = fq._scope_snapshot_queue(snap, filter_repo="alpha/repo", filter_label=())
     # queue is alpha/repo only
     assert {j.repo for j in scoped.queue} == {"alpha/repo"}
     # warning for stuck/repo still surfaces
@@ -463,8 +455,8 @@ def test_position_spans_needs_gated_jobs_too():
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [
         _job(10, runs_on=("grunt",), needs=("dep",)),  # blocked_on_needs
-        _job(20, runs_on=("grunt",)),                  # waiting_for_runner
-        _job(30, runs_on=("nope",)),                   # unschedulable
+        _job(20, runs_on=("grunt",)),  # waiting_for_runner
+        _job(30, runs_on=("nope",)),  # unschedulable
     ]
     snap = _agg(runners=runners, jobs=jobs)
     positions = {j.job_id: j.position for j in snap.queue}
@@ -649,8 +641,14 @@ def test_wedged_sentinel_suppressed_by_running_sibling_in_same_repo():
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [
         _sentinel_job(10, repo_id=42),
-        _job(11, status="running", task_id=99, repo_id=42,
-             runs_on=("grunt",), name="pipeline.lint"),
+        _job(
+            11,
+            status="running",
+            task_id=99,
+            repo_id=42,
+            runs_on=("grunt",),
+            name="pipeline.lint",
+        ),
     ]
     snap = _agg(runners=runners, jobs=jobs, repo_names={42: "owner/app"})
     assert _wedged_warnings(snap) == []
@@ -663,8 +661,9 @@ def test_wedged_sentinel_suppressed_by_waiting_non_sentinel_sibling():
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [
         _sentinel_job(10, repo_id=42),
-        _job(11, status="waiting", repo_id=42, runs_on=("grunt",),
-             needs=(), name="build"),
+        _job(
+            11, status="waiting", repo_id=42, runs_on=("grunt",), needs=(), name="build"
+        ),
     ]
     snap = _agg(runners=runners, jobs=jobs, repo_names={42: "owner/app"})
     assert _wedged_warnings(snap) == []
@@ -691,8 +690,7 @@ def test_plain_chain_tail_needs_is_not_sentinel_shaped():
     """
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [
-        _job(10, repo_id=42, runs_on=("grunt",), needs=("lint",),
-             name="deploy"),
+        _job(10, repo_id=42, runs_on=("grunt",), needs=("lint",), name="deploy"),
     ]
     snap = _agg(runners=runners, jobs=jobs, repo_names={42: "owner/app"})
     assert snap.queue[0].blocked_reason == fq.BLOCKED_ON_NEEDS
@@ -706,8 +704,14 @@ def test_activity_in_a_different_repo_does_not_suppress():
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [
         _sentinel_job(10, repo_id=42),
-        _job(11, status="running", task_id=99, repo_id=99,
-             runs_on=("grunt",), name="other-repo-job"),
+        _job(
+            11,
+            status="running",
+            task_id=99,
+            repo_id=99,
+            runs_on=("grunt",),
+            name="other-repo-job",
+        ),
     ]
     repo_names = {42: "owner/app", 99: "owner/other"}
     snap = _agg(runners=runners, jobs=jobs, repo_names=repo_names)
@@ -779,7 +783,7 @@ def test_task_id_preserved_None_when_waiting_int_when_running():
     """
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [
-        _job(10, status="waiting", runs_on=("grunt",)),         # task_id=0 on wire
+        _job(10, status="waiting", runs_on=("grunt",)),  # task_id=0 on wire
         _job(20, status="running", task_id=98765, runs_on=("grunt",)),
     ]
     snap = _agg(runners=runners, jobs=jobs)
@@ -857,7 +861,6 @@ def test_live_fixture_aggregates_consistently():
     assert waiting[0].repo == "owner-b/harbor"
 
 
-
 # ---------------------------------------------------------------------------
 # Runner metrics pass-through (aggregate stays pure: it just carries the
 # pre-fetched runner_pods + metrics_error onto the Snapshot; the actual
@@ -898,6 +901,7 @@ def test_aggregate_does_not_fetch_metrics_itself(monkeypatch):
     """Purity guard: aggregate() must NOT reach for the network. If it
     ever called fetch_runner_pods OR fetch_ncps_status, this blows up.
     """
+
     def _boom(*a, **k):
         raise AssertionError("aggregate() reached for the network")
 
@@ -968,12 +972,8 @@ def test_running_is_not_in_json_contract():
 def test_scope_repo_filters_running_jobs():
     snap = _make_multi_repo_snapshot()
     assert [j.job_id for j in snap.running] == [50]
-    kept = fq._scope_snapshot_queue(
-        snap, filter_repo="running/repo", filter_label=()
-    )
+    kept = fq._scope_snapshot_queue(snap, filter_repo="running/repo", filter_label=())
     assert [j.job_id for j in kept.running] == [50]
-    dropped = fq._scope_snapshot_queue(
-        snap, filter_repo="alpha/repo", filter_label=()
-    )
+    dropped = fq._scope_snapshot_queue(snap, filter_repo="alpha/repo", filter_label=())
     assert dropped.running == ()
     assert dropped.totals == snap.totals

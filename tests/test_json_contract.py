@@ -46,7 +46,18 @@ def _runner(rid, *, status="active", labels=("grunt",), name=None):
     )
 
 
-def _job(jid, *, status="waiting", repo_id=85, owner_id=11, runs_on=("grunt",), needs=(), task_id=0, attempt=1, name=None):
+def _job(
+    jid,
+    *,
+    status="waiting",
+    repo_id=85,
+    owner_id=11,
+    runs_on=("grunt",),
+    needs=(),
+    task_id=0,
+    attempt=1,
+    name=None,
+):
     return fq.RawJob(
         id=jid,
         name=name or f"job-{jid}",
@@ -233,9 +244,9 @@ def test_blocked_reason_enum_values_appear_unchanged_on_wire():
     """
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [
-        _job(10, runs_on=("grunt",), needs=()),                 # waiting_for_runner
-        _job(20, runs_on=("nope",), needs=()),                  # unschedulable
-        _job(30, runs_on=("grunt",), needs=("upstream",)),      # blocked_on_needs
+        _job(10, runs_on=("grunt",), needs=()),  # waiting_for_runner
+        _job(20, runs_on=("nope",), needs=()),  # unschedulable
+        _job(30, runs_on=("grunt",), needs=("upstream",)),  # blocked_on_needs
     ]
     snap = _snap(runners=runners, jobs=jobs)
     by_id = {j["job_id"]: j["blocked_reason"] for j in fq.to_dict(snap)["queue"]}
@@ -307,7 +318,9 @@ def test_render_json_is_byte_stable_under_frozen_clock():
     ]
     jobs = [
         _job(20, runs_on=("grunt",), needs=()),
-        _job(10, runs_on=("docker", "gpu"), needs=()),  # schedulable via runner-2? no, docker on r2, gpu on r1 -> superset miss
+        _job(
+            10, runs_on=("docker", "gpu"), needs=()
+        ),  # schedulable via runner-2? no, docker on r2, gpu on r1 -> superset miss
     ]
     snap = _snap(runners=runners, jobs=jobs, repo_names={85: "owner-c/theme-api"})
     a = fq.render_json(snap)
@@ -404,7 +417,9 @@ def test_render_json_validates_against_schema_for_typical_snapshot(schema):
         (fq.SchemaDrift, "schema_drift", fq.EXIT_SCHEMA_DRIFT),
     ],
 )
-def test_error_envelope_code_and_exit_per_exception(exc_cls, expected_code, expected_exit):
+def test_error_envelope_code_and_exit_per_exception(
+    exc_cls, expected_code, expected_exit
+):
     exc = exc_cls("something went wrong")
     rendered = fq.render_json_error(exc, host=HOST)
     parsed = json.loads(rendered)
@@ -469,7 +484,7 @@ def test_error_envelope_scrubs_token_from_message():
     secret = "abc123DEADBEEFsecrettoken456"
     exc = fq.ConnectionError(
         f"403 on /api/v1/admin/actions/runners: "
-        f"{{\"error\":\"bad Authorization: token {secret}\"}}"
+        f'{{"error":"bad Authorization: token {secret}"}}'
     )
     rendered = fq.render_json_error(exc, host=HOST, scrub_token=secret)
     parsed = json.loads(rendered)
@@ -627,6 +642,7 @@ def test_rfc3339_helper_normalizes_non_utc_offset_to_utc():
     UTC, never offset-suffixed.
     """
     from datetime import timedelta
+
     plus_two = timezone(timedelta(hours=2))
     dt = datetime(2026, 5, 27, 16, 3, 11, tzinfo=plus_two)
     assert fq._rfc3339_utc_z(dt) == "2026-05-27T14:03:11Z"
@@ -681,7 +697,9 @@ def test_live_fixture_renders_valid_json(schema):
 # ---------------------------------------------------------------------------
 
 
-def _pod(name, *, node="node-a-1", cpu=0.01, mem=700_000_000, cpu_limit=None, mem_limit=None):
+def _pod(
+    name, *, node="node-a-1", cpu=0.01, mem=700_000_000, cpu_limit=None, mem_limit=None
+):
     return fq.PodResource(
         pod=name,
         node=node,
@@ -794,7 +812,9 @@ def test_ncps_null_when_absent_validates(schema):
 
 
 def test_ncps_idle_wire_shape(schema):
-    snap = _snap(ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0))
+    snap = _snap(
+        ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0)
+    )
     d = fq.to_dict(snap)
     assert d["ncps"]["active"] is False
     # Idle NCPS: ncps_error must be null (not "disabled").

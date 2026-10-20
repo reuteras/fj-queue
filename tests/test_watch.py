@@ -43,7 +43,16 @@ def _runner(rid, *, status="active", labels=("grunt",), name=None):
     )
 
 
-def _job(jid, *, status="waiting", repo_id=85, runs_on=("grunt",), needs=(), task_id=0, name=None):
+def _job(
+    jid,
+    *,
+    status="waiting",
+    repo_id=85,
+    runs_on=("grunt",),
+    needs=(),
+    task_id=0,
+    name=None,
+):
     return fq.RawJob(
         id=jid,
         name=name or f"job-{jid}",
@@ -128,6 +137,7 @@ def _silent_console():
     callbacks instead of parsing the rendered text.
     """
     from rich.console import Console
+
     return Console(file=io.StringIO(), force_terminal=False, width=120)
 
 
@@ -137,6 +147,7 @@ def _capturing_console():
     one-frame AuthError error message.
     """
     from rich.console import Console
+
     buf = io.StringIO()
     return Console(file=buf, force_terminal=False, width=120), buf
 
@@ -195,17 +206,19 @@ def test_happy_path_three_distinct_frames():
 
 def test_scripted_sequence_good_good_timeout_good():
     """The PRD-mandated `[good, good, timeout, good]`:
-      tick 1: good   -> frame snapshot, no marker
-      tick 2: good   -> frame snapshot (new), no marker
-      tick 3: timeout-> frame is LAST-GOOD (tick 2) with stale marker
-      tick 4: good   -> frame snapshot (new), marker cleared
+    tick 1: good   -> frame snapshot, no marker
+    tick 2: good   -> frame snapshot (new), no marker
+    tick 3: timeout-> frame is LAST-GOOD (tick 2) with stale marker
+    tick 4: good   -> frame snapshot (new), marker cleared
     """
-    client = FakeClient([
-        _good_tick("a"),
-        _good_tick("b"),
-        fq.ConnectionError("timeout calling /api/v1/admin/actions/runners"),
-        _good_tick("c"),
-    ])
+    client = FakeClient(
+        [
+            _good_tick("a"),
+            _good_tick("b"),
+            fq.ConnectionError("timeout calling /api/v1/admin/actions/runners"),
+            _good_tick("c"),
+        ]
+    )
     frames: list[tuple[int, fq.Snapshot | None, str | None]] = []
 
     rc = fq.run_watch(
@@ -242,10 +255,12 @@ def test_stale_marker_carries_last_good_at_hhmmss_and_interval():
     from the LAST-GOOD tick's clock (NOT the failing tick's), and
     the `Ns` carries the configured interval.
     """
-    client = FakeClient([
-        _good_tick(),
-        fq.ConnectionError("timeout"),
-    ])
+    client = FakeClient(
+        [
+            _good_tick(),
+            fq.ConnectionError("timeout"),
+        ]
+    )
     frames: list = []
 
     # Last-good fires at T0 = 14:03:11; failure at T0 + 1s.
@@ -269,10 +284,12 @@ def test_stale_marker_fractional_interval_formatted_with_g():
     """`{interval:g}s` keeps fractional values readable (`2.5s`)
     while trimming `.0` from whole-number floats (`2s`).
     """
-    client = FakeClient([
-        _good_tick(),
-        fq.ConnectionError("timeout"),
-    ])
+    client = FakeClient(
+        [
+            _good_tick(),
+            fq.ConnectionError("timeout"),
+        ]
+    )
     frames: list = []
     fq.run_watch(
         config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
@@ -302,7 +319,9 @@ def test_auth_error_on_first_tick_raises_without_rendering_anything():
     frames: list = []
     with pytest.raises(fq.AuthError):
         fq.run_watch(
-            config=fq.Config(host=HOST, token="bad", timeout=5.0, metrics_enabled=False),
+            config=fq.Config(
+                host=HOST, token="bad", timeout=5.0, metrics_enabled=False
+            ),
             interval=0.0,
             iterations=10,
             client=client,
@@ -324,11 +343,13 @@ def test_auth_error_after_some_good_ticks_renders_error_frame_then_raises():
     on_frame; the rendered text contains a human-readable error
     panel.
     """
-    client = FakeClient([
-        _good_tick(),
-        _good_tick(),
-        fq.AuthError("403 forbidden: admin scope required"),
-    ])
+    client = FakeClient(
+        [
+            _good_tick(),
+            _good_tick(),
+            fq.AuthError("403 forbidden: admin scope required"),
+        ]
+    )
     frames: list = []
     pause_calls: list[float] = []
     console, buf = _capturing_console()
@@ -365,11 +386,13 @@ def test_schema_drift_stops_no_retry():
     immediately. (Reverted from the brief's transient grouping; the
     PRD is canonical.)
     """
-    client = FakeClient([
-        _good_tick("a"),
-        fq.SchemaDrift("unexpected payload shape"),
-        _good_tick("b"),  # must never be reached
-    ])
+    client = FakeClient(
+        [
+            _good_tick("a"),
+            fq.SchemaDrift("unexpected payload shape"),
+            _good_tick("b"),  # must never be reached
+        ]
+    )
     frames: list = []
     with pytest.raises(fq.SchemaDrift):
         fq.run_watch(
@@ -386,7 +409,7 @@ def test_schema_drift_stops_no_retry():
     # Two frames: the good tick 1, then the mid-loop schema-drift error
     # frame. Tick 3 (the second good tick) is never reached.
     assert len(frames) == 2
-    assert frames[0][2] is None              # tick 1 fresh, no marker
+    assert frames[0][2] is None  # tick 1 fresh, no marker
     assert frames[1] == (2, None, "SCHEMA_DRIFT")  # error frame
     assert client.tick_calls == 2
 
@@ -397,10 +420,12 @@ def test_mid_loop_schema_drift_renders_error_frame_then_raises():
     pauses error_pause, then re-raises. NO STALE banner (it is not
     transient).
     """
-    client = FakeClient([
-        _good_tick(),
-        fq.SchemaDrift("runners payload was an object, expected list"),
-    ])
+    client = FakeClient(
+        [
+            _good_tick(),
+            fq.SchemaDrift("runners payload was an object, expected list"),
+        ]
+    )
     frames: list = []
     pause_calls: list[float] = []
     console, buf = _capturing_console()
@@ -693,6 +718,7 @@ def test_format_stale_marker_converts_non_utc_to_utc_first():
     always uses UTC.
     """
     from datetime import timedelta
+
     plus_two = timezone(timedelta(hours=2))
     last_good = datetime(2026, 5, 27, 11, 5, 42, tzinfo=plus_two)
     # 11:05:42 +02:00 == 09:05:42 UTC.
@@ -748,6 +774,7 @@ def test_watch_renderable_no_banner_when_no_marker():
     )
     wrapped = fq._watch_renderable(snap, None)
     from rich.console import Console
+
     buf = io.StringIO()
     Console(file=buf, width=120, force_terminal=False).print(wrapped)
     out = buf.getvalue()
@@ -758,6 +785,7 @@ def test_watch_renderable_no_banner_when_no_marker():
 
 def test_watch_renderable_with_marker_wraps_in_group_with_banner():
     from rich.console import Group
+
     snap = fq.aggregate(
         runners=(),
         jobs=(),
@@ -769,6 +797,7 @@ def test_watch_renderable_with_marker_wraps_in_group_with_banner():
     assert isinstance(wrapped, Group)
     # Rendered text contains the stale marker.
     from rich.console import Console
+
     buf = io.StringIO()
     Console(file=buf, width=120, force_terminal=False).print(wrapped)
     out = buf.getvalue()
@@ -798,14 +827,14 @@ def test_run_watch_forwards_config_token_to_error_renderable_scrub():
     passes `scrub_token=config.token` to `_build_error_renderable`.
     """
     secret = "ghp_LIVEsecret_should_NOT_leak_via_watch_panel_AAAAA"
-    leaky_exc = fq.AuthError(
-        f"401 unauthorized; raw header was 'token {secret}'"
-    )
+    leaky_exc = fq.AuthError(f"401 unauthorized; raw header was 'token {secret}'")
     client = FakeClient([_good_tick(), leaky_exc])
     console, buf = _capturing_console()
     with pytest.raises(fq.AuthError):
         fq.run_watch(
-            config=fq.Config(host=HOST, token=secret, timeout=5.0, metrics_enabled=False),
+            config=fq.Config(
+                host=HOST, token=secret, timeout=5.0, metrics_enabled=False
+            ),
             interval=0.0,
             iterations=10,
             client=client,
@@ -843,7 +872,9 @@ def test_run_watch_forwards_config_token_on_schema_drift_too():
     console, buf = _capturing_console()
     with pytest.raises(fq.SchemaDrift):
         fq.run_watch(
-            config=fq.Config(host=HOST, token=secret, timeout=5.0, metrics_enabled=False),
+            config=fq.Config(
+                host=HOST, token=secret, timeout=5.0, metrics_enabled=False
+            ),
             interval=0.0,
             iterations=10,
             client=client,

@@ -46,7 +46,16 @@ def _runner(rid, *, status="active", labels=("grunt",), name=None):
     )
 
 
-def _job(jid, *, status="waiting", repo_id=85, runs_on=("grunt",), needs=(), task_id=0, name=None):
+def _job(
+    jid,
+    *,
+    status="waiting",
+    repo_id=85,
+    runs_on=("grunt",),
+    needs=(),
+    task_id=0,
+    name=None,
+):
     return fq.RawJob(
         id=jid,
         name=name or f"job-{jid}",
@@ -93,9 +102,28 @@ def _typical_client():
             _runner(2, name="k8s-runner-b", status="offline", labels=("docker",)),
         ],
         jobs=[
-            _job(80239, status="waiting", repo_id=85, runs_on=("grunt",), name="Semantic Release"),
-            _job(79969, status="waiting", repo_id=586, runs_on=("special",), name="pipeline"),
-            _job(83886, status="running", task_id=85492, repo_id=589, runs_on=("grunt",), name="Chainsaw"),
+            _job(
+                80239,
+                status="waiting",
+                repo_id=85,
+                runs_on=("grunt",),
+                name="Semantic Release",
+            ),
+            _job(
+                79969,
+                status="waiting",
+                repo_id=586,
+                runs_on=("special",),
+                name="pipeline",
+            ),
+            _job(
+                83886,
+                status="running",
+                task_id=85492,
+                repo_id=589,
+                runs_on=("grunt",),
+                name="Chainsaw",
+            ),
         ],
         repos={85: "owner-c/theme-api", 586: "owner-b/harbor", 589: "owner-a/repo-a"},
     )
@@ -256,7 +284,10 @@ def test_main_scrubs_token_from_json_error_envelope(monkeypatch):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--once", "--host", HOST],
-        client=client, stdout=out, stderr=err, is_tty=False,
+        client=client,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_CONNECTION
     rendered = out.getvalue()
@@ -270,7 +301,9 @@ def test_token_flag_is_rejected():
     argparse rejects it as an unknown argument with exit 2."""
     rc = fq.main(
         ["--format", "json", "--once", "--token", "x", "--host", HOST],
-        stdout=io.StringIO(), stderr=io.StringIO(), is_tty=False,
+        stdout=io.StringIO(),
+        stderr=io.StringIO(),
+        is_tty=False,
     )
     assert rc == fq.EXIT_USAGE
 
@@ -279,7 +312,8 @@ def test_main_env_token_beats_config_token_ref(monkeypatch, tmp_path):
     """$FORGEJO_TOKEN wins over token_ref; `op` is never consulted."""
     monkeypatch.setenv("FORGEJO_TOKEN", "ENV_TOKEN_Y")
     monkeypatch.setattr(
-        fq.shutil, "which",
+        fq.shutil,
+        "which",
         lambda _n: pytest.fail("op must not be looked up when env is set"),
     )
     cfg = tmp_path / "c.toml"
@@ -288,7 +322,10 @@ def test_main_env_token_beats_config_token_ref(monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     fq.main(
         ["--format", "json", "--once", "--host", HOST, "--config", str(cfg)],
-        client=client, stdout=out, stderr=err, is_tty=False,
+        client=client,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert "ENV_TOKEN_Y" not in out.getvalue()  # resolved -> scrubbed
 
@@ -311,7 +348,10 @@ def test_main_token_ref_resolved_via_op_when_env_unset(monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--once", "--host", HOST, "--config", str(cfg)],
-        client=client, stdout=out, stderr=err, is_tty=False,
+        client=client,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_CONNECTION
     assert calls == [["/usr/bin/op", "read", "--no-newline", "op://V/I/f"]]
@@ -320,19 +360,19 @@ def test_main_token_ref_resolved_via_op_when_env_unset(monkeypatch, tmp_path):
 
 
 def test_main_env_token_used_when_no_arg(monkeypatch):
-    """$FORGEJO_TOKEN is the resolved token (and thus the one scrubbed).
-    """
+    """$FORGEJO_TOKEN is the resolved token (and thus the one scrubbed)."""
     monkeypatch.setenv("FORGEJO_TOKEN", "ENV_ONLY_TOKEN")
-    client = FakeClient(
-        error=fq.ConnectionError("fail with ENV_ONLY_TOKEN inside")
-    )
+    client = FakeClient(error=fq.ConnectionError("fail with ENV_ONLY_TOKEN inside"))
     out, err = io.StringIO(), io.StringIO()
     fq.main(
         ["--format", "json", "--once", "--host", HOST],
-        client=client, stdout=out, stderr=err, is_tty=False,
+        client=client,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     rendered = out.getvalue()
-    assert "ENV_ONLY_TOKEN" not in rendered   # env token scrubbed
+    assert "ENV_ONLY_TOKEN" not in rendered  # env token scrubbed
 
 
 def test_plain_error_goes_to_stderr_not_stdout():
@@ -390,11 +430,11 @@ def test_repo_filter_preserves_global_positions_with_gaps():
     client = FakeClient(
         runners=[_runner(1, status="active", labels=("grunt",))],
         jobs=[
-            _job(10, repo_id=85, runs_on=("grunt",)),   # alpha pos 1
-            _job(20, repo_id=99, runs_on=("grunt",)),   # other pos 2
-            _job(30, repo_id=85, runs_on=("grunt",)),   # alpha pos 3
-            _job(40, repo_id=99, runs_on=("grunt",)),   # other pos 4
-            _job(50, repo_id=85, runs_on=("grunt",)),   # alpha pos 5
+            _job(10, repo_id=85, runs_on=("grunt",)),  # alpha pos 1
+            _job(20, repo_id=99, runs_on=("grunt",)),  # other pos 2
+            _job(30, repo_id=85, runs_on=("grunt",)),  # alpha pos 3
+            _job(40, repo_id=99, runs_on=("grunt",)),  # other pos 4
+            _job(50, repo_id=85, runs_on=("grunt",)),  # alpha pos 5
         ],
         repos={85: "alpha/repo", 99: "other/repo"},
     )
@@ -465,10 +505,10 @@ def test_label_filter_preserves_global_positions():
     client = FakeClient(
         runners=[_runner(1, status="active", labels=("grunt", "docker"))],
         jobs=[
-            _job(10, runs_on=("grunt",)),               # pos 1, matches grunt
-            _job(20, runs_on=("special",)),             # pos 2, no match
-            _job(30, runs_on=("grunt", "docker")),      # pos 3, matches grunt
-            _job(40, runs_on=("docker",)),              # pos 4, no match
+            _job(10, runs_on=("grunt",)),  # pos 1, matches grunt
+            _job(20, runs_on=("special",)),  # pos 2, no match
+            _job(30, runs_on=("grunt", "docker")),  # pos 3, matches grunt
+            _job(40, runs_on=("docker",)),  # pos 4, no match
         ],
         repos={85: "x/y"},
     )
@@ -591,7 +631,10 @@ def test_stderr_diagnostic_scrubs_token_in_plain_mode(monkeypatch):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "plain", "--once", "--host", HOST],
-        client=client, stdout=out, stderr=err, is_tty=False,
+        client=client,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_CONNECTION
     err_text = err.getvalue()
@@ -610,7 +653,10 @@ def test_stderr_diagnostic_scrubs_token_in_json_mode(monkeypatch):
     out, err = io.StringIO(), io.StringIO()
     fq.main(
         ["--format", "json", "--once", "--host", HOST],
-        client=client, stdout=out, stderr=err, is_tty=False,
+        client=client,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert secret not in err.getvalue()
     assert secret not in out.getvalue()
@@ -670,11 +716,16 @@ def test_malformed_host_crlf_returns_typed_usage_error_json():
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         [
-            "--format", "json", "--once",
-            "--host", "bad\r\nval",
+            "--format",
+            "json",
+            "--once",
+            "--host",
+            "bad\r\nval",
         ],
         client=None,  # let main() build Client(config) so InvalidURL fires
-        stdout=out, stderr=err, is_tty=False,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_USAGE
     rendered = out.getvalue()
@@ -690,10 +741,16 @@ def test_malformed_host_plain_format_still_typed_usage():
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         [
-            "--format", "plain", "--once",
-            "--host", "bad\r\nval",
+            "--format",
+            "plain",
+            "--once",
+            "--host",
+            "bad\r\nval",
         ],
-        client=None, stdout=out, stderr=err, is_tty=False,
+        client=None,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_USAGE
     assert out.getvalue() == ""
@@ -766,13 +823,19 @@ def test_cli_metrics_enabled_populates_runner_pods():
     """--metrics opt-in path: with a reachable (mocked) Prometheus the
     JSON carries populated runner_pods with raw usage + limit numbers.
     """
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=_prom_handler())
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=_prom_handler()
+    )
 
     rc, out, _err = _run(
-        ["--format", "json", "--once", "--metrics",
-         "--metrics-url", "https://prometheus.example.com"],
+        [
+            "--format",
+            "json",
+            "--once",
+            "--metrics",
+            "--metrics-url",
+            "https://prometheus.example.com",
+        ],
         client=_typical_client(),
     )
     assert rc == fq.EXIT_OK
@@ -792,13 +855,20 @@ def test_cli_metrics_enabled_populates_runner_pods():
 @respx.mock
 def test_cli_metrics_and_ncps_both_enabled():
     """--metrics --ncps: both fetch from the same mocked Prometheus."""
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(side_effect=_prom_handler())
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        side_effect=_prom_handler()
+    )
 
     rc, out, _err = _run(
-        ["--format", "json", "--once", "--metrics", "--ncps",
-         "--metrics-url", "https://prometheus.example.com"],
+        [
+            "--format",
+            "json",
+            "--once",
+            "--metrics",
+            "--ncps",
+            "--metrics-url",
+            "https://prometheus.example.com",
+        ],
         client=_typical_client(),
     )
     assert rc == fq.EXIT_OK
@@ -829,13 +899,19 @@ def test_cli_metrics_failure_degrades_gracefully():
     """A Prometheus 500 does not break the dashboard: exit 0, runner_pods
     empty, metrics.error carries the reason (not "disabled").
     """
-    respx.get(
-        url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
-    ).mock(return_value=httpx.Response(500, text="boom"))
+    respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
+        return_value=httpx.Response(500, text="boom")
+    )
 
     rc, out, _err = _run(
-        ["--format", "json", "--once", "--metrics",
-         "--metrics-url", "https://prometheus.example.com"],
+        [
+            "--format",
+            "json",
+            "--once",
+            "--metrics",
+            "--metrics-url",
+            "https://prometheus.example.com",
+        ],
         client=_typical_client(),
     )
     assert rc == fq.EXIT_OK

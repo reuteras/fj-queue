@@ -245,10 +245,16 @@ def test_resolve_repos_for_jobs_worst_case_all_distinct_repo_ids():
 
     jobs = [
         fq.RawJob(
-            id=jid, name=f"job-{jid}", status="waiting",
-            repo_id=jid,                   # every job a unique repo
-            owner_id=1, runs_on=("grunt",), needs=(),
-            task_id=0, attempt=1, handle=f"h-{jid}",
+            id=jid,
+            name=f"job-{jid}",
+            status="waiting",
+            repo_id=jid,  # every job a unique repo
+            owner_id=1,
+            runs_on=("grunt",),
+            needs=(),
+            task_id=0,
+            attempt=1,
+            handle=f"h-{jid}",
         )
         for jid in range(1, 2001)
     ]

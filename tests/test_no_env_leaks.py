@@ -31,8 +31,8 @@ EXCLUDED_DIRS = {
     ".venv",
     "__pycache__",
     ".pytest_cache",
-    ".claude",       # agent-team-tasks working notes live here
-    "prds",          # PRD documents legitimately describe old state
+    ".claude",  # agent-team-tasks working notes live here
+    "prds",  # PRD documents legitimately describe old state
 }
 
 # Files excluded from scanning (relative to REPO_ROOT).
@@ -66,7 +66,9 @@ FORBIDDEN_PATTERNS: list[tuple[str, str]] = [
 # as part of an org/repo path or login field) but not as a project keyword
 # in prose (e.g. "Crossplane" with capital C is the OSS project name and
 # may appear in documentation).
-FORBIDDEN_PATTERNS.append((r"\"crossplane\"", "internal org slug as JSON string literal"))
+FORBIDDEN_PATTERNS.append(
+    (r"\"crossplane\"", "internal org slug as JSON string literal")
+)
 FORBIDDEN_PATTERNS.append((r"crossplane/", "internal org slug in repo path"))
 FORBIDDEN_PATTERNS.append((r"\bcontainers/", "real 'containers' org slug in repo path"))
 
@@ -123,9 +125,7 @@ def test_no_environment_specific_literals():
             for match in regex.finditer(content):
                 # Find the line number.
                 lineno = content[: match.start()].count("\n") + 1
-                violations.append(
-                    f"{rel}:{lineno}: [{desc}] matched {match.group()!r}"
-                )
+                violations.append(f"{rel}:{lineno}: [{desc}] matched {match.group()!r}")
 
     if violations:
         msg = "Environment-specific literals found in repo tree:\n" + "\n".join(

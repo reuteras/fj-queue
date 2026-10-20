@@ -145,9 +145,7 @@ def test_load_file_config_other_keys_survive_stripping(tmp_path):
     """Stripping `token` must not affect other keys."""
     cfg = tmp_path / "safe.toml"
     cfg.write_text(
-        'host = "safe.example.com"\n'
-        'token = "do-not-load"\n'
-        '[metrics]\nenabled = true\n'
+        'host = "safe.example.com"\ntoken = "do-not-load"\n[metrics]\nenabled = true\n'
     )
     result = fq.load_file_config(config_arg=str(cfg))
     assert result["host"] == "safe.example.com"
@@ -226,7 +224,9 @@ def test_missing_host_exits_2_json(monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json"],
-        stdout=out, stderr=err, is_tty=False,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_USAGE
     parsed = json.loads(out.getvalue())
@@ -242,7 +242,9 @@ def test_missing_host_exits_2_plain(monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "plain"],
-        stdout=out, stderr=err, is_tty=False,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_USAGE
     assert out.getvalue() == ""
@@ -259,16 +261,25 @@ def test_host_from_config_file_reaches_json_output(tmp_path, monkeypatch):
 
     # Build a minimal FakeClient to avoid network.
     class _FakeClient:
-        def fetch_runners(self): return []
-        def fetch_jobs(self): return []
-        def resolve_repo(self, rid): return f"repo#{rid}"
-        def close(self): pass
+        def fetch_runners(self):
+            return []
+
+        def fetch_jobs(self):
+            return []
+
+        def resolve_repo(self, rid):
+            return f"repo#{rid}"
+
+        def close(self):
+            pass
 
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--config", str(cfg),
-         "--no-metrics"],
-        client=_FakeClient(), stdout=out, stderr=err, is_tty=False,
+        ["--format", "json", "--config", str(cfg), "--no-metrics"],
+        client=_FakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_OK
     parsed = json.loads(out.getvalue())
@@ -284,16 +295,33 @@ def test_host_flag_beats_config_file(tmp_path, monkeypatch):
     cfg.write_text('host = "config.example.com"\n')
 
     class _FakeClient:
-        def fetch_runners(self): return []
-        def fetch_jobs(self): return []
-        def resolve_repo(self, rid): return f"repo#{rid}"
-        def close(self): pass
+        def fetch_runners(self):
+            return []
+
+        def fetch_jobs(self):
+            return []
+
+        def resolve_repo(self, rid):
+            return f"repo#{rid}"
+
+        def close(self):
+            pass
 
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--config", str(cfg),
-         "--host", "flag.example.com", "--no-metrics"],
-        client=_FakeClient(), stdout=out, stderr=err, is_tty=False,
+        [
+            "--format",
+            "json",
+            "--config",
+            str(cfg),
+            "--host",
+            "flag.example.com",
+            "--no-metrics",
+        ],
+        client=_FakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_OK
     parsed = json.loads(out.getvalue())
@@ -313,7 +341,9 @@ def test_token_from_config_file_is_ignored(tmp_path, monkeypatch):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--config", str(cfg)],
-        stdout=out, stderr=err, is_tty=False,
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     # Token not in env or args -> usage error (config token is silently dropped).
     assert rc == fq.EXIT_USAGE
@@ -331,10 +361,18 @@ def test_token_from_config_file_is_ignored(tmp_path, monkeypatch):
 
 class _MetricsFakeClient:
     """Minimal FakeClient for metrics wiring tests."""
-    def fetch_runners(self): return []
-    def fetch_jobs(self): return []
-    def resolve_repo(self, rid): return f"repo#{rid}"
-    def close(self): pass
+
+    def fetch_runners(self):
+        return []
+
+    def fetch_jobs(self):
+        return []
+
+    def resolve_repo(self, rid):
+        return f"repo#{rid}"
+
+    def close(self):
+        pass
 
 
 def _metrics_main(argv, monkeypatch, tmp_path):
@@ -345,9 +383,16 @@ def _metrics_main(argv, monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--host", "h.example.com"] + argv,
-        client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
+        client=_MetricsFakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
-    return rc, json.loads(out.getvalue()) if out.getvalue().strip() else {}, err.getvalue()
+    return (
+        rc,
+        json.loads(out.getvalue()) if out.getvalue().strip() else {},
+        err.getvalue(),
+    )
 
 
 def test_metrics_off_by_default(monkeypatch, tmp_path):
@@ -389,9 +434,9 @@ def test_metrics_config_enabled_true(monkeypatch, tmp_path):
     Prometheus is mocked to raise ConnectError so no real DNS is needed; the
     error must NOT be 'disabled' -- that proves the opt-in fired.
     """
-    respx.get(
-        url__regex=r"http://no-such-host\.invalid:9090/.*"
-    ).mock(side_effect=httpx.ConnectError("mocked: host unreachable"))
+    respx.get(url__regex=r"http://no-such-host\.invalid:9090/.*").mock(
+        side_effect=httpx.ConnectError("mocked: host unreachable")
+    )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
     monkeypatch.delenv("FORGEJO_HOST", raising=False)
@@ -404,7 +449,10 @@ def test_metrics_config_enabled_true(monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--config", str(cfg)],
-        client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
+        client=_MetricsFakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_OK
     parsed = json.loads(out.getvalue())
@@ -419,14 +467,14 @@ def test_no_metrics_flag_beats_config_enabled(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
     monkeypatch.delenv("FORGEJO_HOST", raising=False)
     cfg = tmp_path / "fj-queue.toml"
-    cfg.write_text(
-        'host = "h.example.com"\n[metrics]\nenabled = true\n'
-    )
+    cfg.write_text('host = "h.example.com"\n[metrics]\nenabled = true\n')
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--config", str(cfg),
-         "--no-metrics"],
-        client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
+        ["--format", "json", "--config", str(cfg), "--no-metrics"],
+        client=_MetricsFakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_OK
     parsed = json.loads(out.getvalue())
@@ -438,16 +486,16 @@ def test_metrics_config_namespace_layering(monkeypatch, tmp_path):
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
     cfg = tmp_path / "ns.toml"
-    cfg.write_text(
-        '[metrics]\nenabled = false\nnamespace = "my-runners"\n'
-    )
+    cfg.write_text('[metrics]\nenabled = false\nnamespace = "my-runners"\n')
     # We can't observe namespace directly from JSON output (it's not surfaced),
     # but we can verify Config is built without errors.
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--host", "h.example.com",
-         "--config", str(cfg)],
-        client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
+        ["--format", "json", "--host", "h.example.com", "--config", str(cfg)],
+        client=_MetricsFakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_OK
     parsed = json.loads(out.getvalue())
@@ -458,10 +506,13 @@ def test_node_prefix_flag_wired(monkeypatch, tmp_path):
     """--node-prefix reaches Config.metrics_node_prefix (observable via
     the disabled path: if it didn't crash, the field exists and accepted a value).
     """
-    rc, parsed, _ = _metrics_main(["--no-metrics", "--node-prefix", "k8s-node-"],
-                                   monkeypatch, tmp_path)
+    rc, parsed, _ = _metrics_main(
+        ["--no-metrics", "--node-prefix", "k8s-node-"], monkeypatch, tmp_path
+    )
     assert rc == fq.EXIT_OK
-    assert parsed["metrics"]["error"] == "disabled"  # metrics off; prefix stored but not used
+    assert (
+        parsed["metrics"]["error"] == "disabled"
+    )  # metrics off; prefix stored but not used
 
 
 def test_node_prefix_from_config(monkeypatch, tmp_path):
@@ -476,7 +527,10 @@ def test_node_prefix_from_config(monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--config", str(cfg)],
-        client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
+        client=_MetricsFakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_OK
     parsed = json.loads(out.getvalue())
@@ -498,9 +552,16 @@ def _ncps_main(argv, monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--host", "h.example.com"] + argv,
-        client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
+        client=_MetricsFakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
-    return rc, json.loads(out.getvalue()) if out.getvalue().strip() else {}, err.getvalue()
+    return (
+        rc,
+        json.loads(out.getvalue()) if out.getvalue().strip() else {},
+        err.getvalue(),
+    )
 
 
 def test_ncps_off_by_default(monkeypatch, tmp_path):
@@ -517,12 +578,13 @@ def test_ncps_flag_enables_ncps(monkeypatch, tmp_path):
     'disabled' -- that proves the opt-in fired. Prometheus is mocked to
     raise ConnectError so no real DNS is needed.
     """
-    respx.get(
-        url__regex=r"http://no-such-host\.invalid:9090/.*"
-    ).mock(side_effect=httpx.ConnectError("mocked: host unreachable"))
+    respx.get(url__regex=r"http://no-such-host\.invalid:9090/.*").mock(
+        side_effect=httpx.ConnectError("mocked: host unreachable")
+    )
     rc, parsed, _ = _ncps_main(
         ["--ncps", "--metrics-url", "http://no-such-host.invalid:9090"],
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
     )
     assert rc == fq.EXIT_OK
     # ncps_error is None (not "disabled"): fetch was attempted.
@@ -554,9 +616,9 @@ def test_ncps_config_enabled_true(monkeypatch, tmp_path):
     Prometheus is mocked to raise ConnectError so no real DNS is needed.
     ncps_error must NOT be 'disabled' -- that proves the opt-in fired.
     """
-    respx.get(
-        url__regex=r"http://no-such-host\.invalid:9090/.*"
-    ).mock(side_effect=httpx.ConnectError("mocked: host unreachable"))
+    respx.get(url__regex=r"http://no-such-host\.invalid:9090/.*").mock(
+        side_effect=httpx.ConnectError("mocked: host unreachable")
+    )
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
     monkeypatch.delenv("FORGEJO_HOST", raising=False)
@@ -569,7 +631,10 @@ def test_ncps_config_enabled_true(monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--config", str(cfg)],
-        client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
+        client=_MetricsFakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_OK
     parsed = json.loads(out.getvalue())
@@ -588,7 +653,10 @@ def test_no_ncps_flag_beats_config_enabled(monkeypatch, tmp_path):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--config", str(cfg), "--no-ncps"],
-        client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
+        client=_MetricsFakeClient(),
+        stdout=out,
+        stderr=err,
+        is_tty=False,
     )
     assert rc == fq.EXIT_OK
     parsed = json.loads(out.getvalue())
@@ -615,12 +683,13 @@ def test_state_metrics_on_ncps_off(monkeypatch, tmp_path):
     """metrics=ON (fetch mocked to raise ConnectError), ncps=OFF:
     metrics error != 'disabled', ncps_error == 'disabled'.
     """
-    respx.get(
-        url__regex=r"http://no-such-host\.invalid:9090/.*"
-    ).mock(side_effect=httpx.ConnectError("mocked: host unreachable"))
+    respx.get(url__regex=r"http://no-such-host\.invalid:9090/.*").mock(
+        side_effect=httpx.ConnectError("mocked: host unreachable")
+    )
     rc, parsed, _ = _ncps_main(
         ["--metrics", "--metrics-url", "http://no-such-host.invalid:9090"],
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
     )
     assert rc == fq.EXIT_OK
     # Metrics attempted (invalid URL) -> error != "disabled".
@@ -636,12 +705,13 @@ def test_state_metrics_off_ncps_on(monkeypatch, tmp_path):
     """metrics=OFF, ncps=ON (fetch mocked to raise ConnectError): metrics.error
     == 'disabled', ncps_error is None (fetch attempted, no data).
     """
-    respx.get(
-        url__regex=r"http://no-such-host\.invalid:9090/.*"
-    ).mock(side_effect=httpx.ConnectError("mocked: host unreachable"))
+    respx.get(url__regex=r"http://no-such-host\.invalid:9090/.*").mock(
+        side_effect=httpx.ConnectError("mocked: host unreachable")
+    )
     rc, parsed, _ = _ncps_main(
         ["--ncps", "--metrics-url", "http://no-such-host.invalid:9090"],
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
     )
     assert rc == fq.EXIT_OK
     # Metrics not attempted.
@@ -657,12 +727,13 @@ def test_state_both_on(monkeypatch, tmp_path):
     """metrics=ON, ncps=ON (both mocked to raise ConnectError): both fetch
     attempted, neither marked 'disabled'.
     """
-    respx.get(
-        url__regex=r"http://no-such-host\.invalid:9090/.*"
-    ).mock(side_effect=httpx.ConnectError("mocked: host unreachable"))
+    respx.get(url__regex=r"http://no-such-host\.invalid:9090/.*").mock(
+        side_effect=httpx.ConnectError("mocked: host unreachable")
+    )
     rc, parsed, _ = _ncps_main(
         ["--metrics", "--ncps", "--metrics-url", "http://no-such-host.invalid:9090"],
-        monkeypatch, tmp_path,
+        monkeypatch,
+        tmp_path,
     )
     assert rc == fq.EXIT_OK
     # Both attempted (invalid URL) -> errors are not "disabled".

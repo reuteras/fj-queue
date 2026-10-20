@@ -26,7 +26,15 @@ NOW = datetime(2026, 5, 27, 14, 3, 11, tzinfo=UTC)
 HOST = "git.example.com"
 
 
-def _runner(rid, *, status="active", labels=("grunt",), name=None, version="v12.7.3", ephemeral=False):
+def _runner(
+    rid,
+    *,
+    status="active",
+    labels=("grunt",),
+    name=None,
+    version="v12.7.3",
+    ephemeral=False,
+):
     return fq.Runner(
         id=rid,
         name=name if name is not None else f"runner-{rid}",
@@ -37,7 +45,18 @@ def _runner(rid, *, status="active", labels=("grunt",), name=None, version="v12.
     )
 
 
-def _job(jid, *, status="waiting", repo_id=85, owner_id=11, runs_on=("grunt",), needs=(), task_id=0, attempt=1, name=None):
+def _job(
+    jid,
+    *,
+    status="waiting",
+    repo_id=85,
+    owner_id=11,
+    runs_on=("grunt",),
+    needs=(),
+    task_id=0,
+    attempt=1,
+    name=None,
+):
     return fq.RawJob(
         id=jid,
         name=name or f"job-{jid}",
@@ -73,19 +92,49 @@ def _snap(runners=(), jobs=(), repo_names=None, **kwargs):
 def _typical_snap():
     """A representative snapshot used by both surfaces' snapshot tests."""
     runners = [
-        _runner(3, name="k8s-runner",   status="active",  labels=("docker", "grunt")),
+        _runner(3, name="k8s-runner", status="active", labels=("docker", "grunt")),
         _runner(2, name="k8s-runner-b", status="offline", labels=("docker",)),
-        _runner(1, name="k8s-runner-c", status="idle",    labels=("grunt", "gpu")),
+        _runner(1, name="k8s-runner-c", status="idle", labels=("grunt", "gpu")),
     ]
     jobs = [
-        _job(83886, status="running", task_id=85492, repo_id=589, owner_id=15,
-             runs_on=("grunt",), needs=("pipeline.generate",), name="Chainsaw E2E Tests"),
-        _job(80239, status="waiting", repo_id=85, owner_id=11,
-             runs_on=("grunt",), needs=(), name="Semantic Release"),
-        _job(79969, status="waiting", repo_id=586, owner_id=15,
-             runs_on=("special",), needs=(), name="pipeline"),
-        _job(80300, status="waiting", repo_id=85, owner_id=11,
-             runs_on=("grunt",), needs=("build",), attempt=2, name="Deploy"),
+        _job(
+            83886,
+            status="running",
+            task_id=85492,
+            repo_id=589,
+            owner_id=15,
+            runs_on=("grunt",),
+            needs=("pipeline.generate",),
+            name="Chainsaw E2E Tests",
+        ),
+        _job(
+            80239,
+            status="waiting",
+            repo_id=85,
+            owner_id=11,
+            runs_on=("grunt",),
+            needs=(),
+            name="Semantic Release",
+        ),
+        _job(
+            79969,
+            status="waiting",
+            repo_id=586,
+            owner_id=15,
+            runs_on=("special",),
+            needs=(),
+            name="pipeline",
+        ),
+        _job(
+            80300,
+            status="waiting",
+            repo_id=85,
+            owner_id=11,
+            runs_on=("grunt",),
+            needs=("build",),
+            attempt=2,
+            name="Deploy",
+        ),
     ]
     return _snap(
         runners=runners,
@@ -245,6 +294,7 @@ def test_rich_returns_a_rich_renderable():
     not a string. M5's Live() loop consumes Renderables directly.
     """
     from rich.console import Group
+
     renderable = fq.render_rich(_typical_snap())
     assert isinstance(renderable, Group)
 
@@ -312,9 +362,7 @@ def test_rich_no_color_when_no_color_env_is_set(monkeypatch):
     console.print(fq.render_rich(_typical_snap()))
     out = buf.getvalue()
     # SGR foreground / background color codes.
-    color_sgr = re.compile(
-        r"\x1b\[(?:\d+;)*(?:3[0-7]|4[0-7]|9[0-7]|10[0-7])(?:;\d+)*m"
-    )
+    color_sgr = re.compile(r"\x1b\[(?:\d+;)*(?:3[0-7]|4[0-7]|9[0-7]|10[0-7])(?:;\d+)*m")
     matches = color_sgr.findall(out)
     assert not matches, f"NO_COLOR env did not suppress color codes: {matches[:3]}"
 
@@ -346,9 +394,16 @@ def _wedged_snap():
         _runner(3, name="k8s-runner", status="active", labels=("docker", "grunt")),
     ]
     jobs = [
-        _job(79969, status="waiting", repo_id=586, owner_id=15,
-             runs_on=(), attempt=2, name="pipeline",
-             needs=("pipeline.lint", "pipeline.test", "pipeline.release")),
+        _job(
+            79969,
+            status="waiting",
+            repo_id=586,
+            owner_id=15,
+            runs_on=(),
+            attempt=2,
+            name="pipeline",
+            needs=("pipeline.lint", "pipeline.test", "pipeline.release"),
+        ),
     ]
     return _snap(
         runners=runners,
@@ -534,12 +589,13 @@ def test_rich_idle_runner_renders_dim_green_distinct_from_active():
     # green to share one SGR sequence (separated by `;`) to lock the
     # idle-row distinction.
     import re
+
     dim_plus_green = re.compile(
-        r"\x1b\["               # SGR escape start
+        r"\x1b\["  # SGR escape start
         r"(?:"
-        r"2;(?:[^m]*;)?[39]2"   # dim first, green later
+        r"2;(?:[^m]*;)?[39]2"  # dim first, green later
         r"|"
-        r"[39]2;(?:[^m]*;)?2"   # green first, dim later
+        r"[39]2;(?:[^m]*;)?2"  # green first, dim later
         r")"
         r"(?:;[^m]*)?m"
     )
@@ -557,7 +613,9 @@ def test_rich_unschedulable_warning_renders_red_in_color_mode():
     """
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [_job(10, runs_on=("nope",), needs=())]
-    text = _render_rich_to_text(_snap(runners=runners, jobs=jobs), width=120, color=True)
+    text = _render_rich_to_text(
+        _snap(runners=runners, jobs=jobs), width=120, color=True
+    )
     # Red SGR present somewhere (the unschedulable cell + warnings panel border).
     assert "\x1b[31m" in text or "\x1b[91m" in text
 
@@ -574,6 +632,7 @@ def test_renderers_never_read_environment_or_clock(monkeypatch):
         @classmethod
         def now(cls, tz=None):
             raise AssertionError("renderer called datetime.now()")
+
         @classmethod
         def utcnow(cls):
             raise AssertionError("renderer called datetime.utcnow()")
@@ -616,12 +675,16 @@ def _pods():
 
 def _metrics_snap():
     """A snapshot with populated per-pod runner resources."""
-    runners = [_runner(3, name="k8s-runner", status="active", labels=("docker", "grunt"))]
+    runners = [
+        _runner(3, name="k8s-runner", status="active", labels=("docker", "grunt"))
+    ]
     return _snap(runners=runners, runner_pods=_pods())
 
 
 def _metrics_error_snap():
-    runners = [_runner(3, name="k8s-runner", status="active", labels=("docker", "grunt"))]
+    runners = [
+        _runner(3, name="k8s-runner", status="active", labels=("docker", "grunt"))
+    ]
     return _snap(
         runners=runners,
         runner_pods=(),
@@ -716,7 +779,9 @@ def test_rich_runner_resources_golden_width_120_no_color(snapshot):
 
 
 def test_rich_metrics_unavailable_golden_width_120_no_color(snapshot):
-    assert _render_rich_to_text(_metrics_error_snap(), width=120, color=False) == snapshot
+    assert (
+        _render_rich_to_text(_metrics_error_snap(), width=120, color=False) == snapshot
+    )
 
 
 def _metrics_disabled_snap():
@@ -759,7 +824,9 @@ def _ncps(active=True, req=8.5, inflight=1, upstream=0.3, bytes_ps=4000000.0):
 
 def _ncps_snap(ncps=None, metrics_error=None, ncps_error=None):
     runners = [_runner(3, name="k8s-runner", status="active", labels=("grunt",))]
-    return _snap(runners=runners, ncps=ncps, metrics_error=metrics_error, ncps_error=ncps_error)
+    return _snap(
+        runners=runners, ncps=ncps, metrics_error=metrics_error, ncps_error=ncps_error
+    )
 
 
 def test_plain_ncps_active_line():
@@ -769,7 +836,9 @@ def test_plain_ncps_active_line():
 
 def test_plain_ncps_idle_line():
     out = fq.render_plain(
-        _ncps_snap(ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0))
+        _ncps_snap(
+            ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0)
+        )
     )
     assert "NCPS: idle" in out
 
@@ -833,7 +902,9 @@ def test_rich_ncps_active_line_present_and_green():
 
 def test_rich_ncps_idle_line():
     text = _render_rich_to_text(
-        _ncps_snap(ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0)),
+        _ncps_snap(
+            ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0)
+        ),
         width=120,
         color=False,
     )
@@ -845,27 +916,47 @@ def test_plain_ncps_active_golden(snapshot):
 
 
 def test_plain_ncps_idle_golden(snapshot):
-    assert fq.render_plain(
-        _ncps_snap(ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0))
-    ) == snapshot
+    assert (
+        fq.render_plain(
+            _ncps_snap(
+                ncps=_ncps(
+                    active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0
+                )
+            )
+        )
+        == snapshot
+    )
 
 
 def test_plain_ncps_disabled_golden(snapshot):
-    assert fq.render_plain(
-        _ncps_snap(ncps=None, metrics_error=fq.METRICS_DISABLED, ncps_error=fq.NCPS_DISABLED)
-    ) == snapshot
+    assert (
+        fq.render_plain(
+            _ncps_snap(
+                ncps=None,
+                metrics_error=fq.METRICS_DISABLED,
+                ncps_error=fq.NCPS_DISABLED,
+            )
+        )
+        == snapshot
+    )
 
 
 def test_rich_ncps_active_golden_width_120_no_color(snapshot):
-    assert _render_rich_to_text(_ncps_snap(ncps=_ncps()), width=120, color=False) == snapshot
+    assert (
+        _render_rich_to_text(_ncps_snap(ncps=_ncps()), width=120, color=False)
+        == snapshot
+    )
 
 
 def test_rich_ncps_unavailable_golden_width_120_no_color(snapshot):
-    assert _render_rich_to_text(
-        _ncps_snap(ncps=None, metrics_error="timeout querying prometheus"),
-        width=120,
-        color=False,
-    ) == snapshot
+    assert (
+        _render_rich_to_text(
+            _ncps_snap(ncps=None, metrics_error="timeout querying prometheus"),
+            width=120,
+            color=False,
+        )
+        == snapshot
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -876,7 +967,10 @@ def test_rich_ncps_unavailable_golden_width_120_no_color(snapshot):
 def test_plain_running_section_lists_running_jobs():
     out = fq.render_plain(_typical_snap())
     assert "RUNNING (1):" in out
-    assert 'job_id=83886  task_id=85492  repo=owner-a/repo-a  name="Chainsaw E2E Tests"' in out
+    assert (
+        'job_id=83886  task_id=85492  repo=owner-a/repo-a  name="Chainsaw E2E Tests"'
+        in out
+    )
 
 
 def test_plain_running_section_empty_marker():
