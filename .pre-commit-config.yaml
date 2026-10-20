@@ -1,0 +1,28 @@
+repos:
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: 44b5042edab9382aba712eed4f9c7bab7a3d6a3e # v0.17.0
+    hooks:
+      - id: ruff-check
+      - id: ruff-format
+
+  - repo: local
+    hooks:
+      - id: mypy
+        name: mypy
+        # Run inside the project's own uv-managed venv so mypy sees the
+        # exact dependency versions pinned in uv.lock instead of a
+        # separately resolved isolated environment.
+        entry: uv run --extra dev mypy .
+        language: system
+        pass_filenames: false
+        types: [python]
+
+  - repo: https://github.com/betterleaks/betterleaks
+    rev: 81aff7a638638aae3a659845d089043e1d8fe9ac # v1.9.0
+    hooks:
+      - id: betterleaks
+
+  - repo: https://github.com/igorshubovych/markdownlint-cli
+    rev: v0.49.1
+    hooks:
+      - id: markdownlint
