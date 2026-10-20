@@ -45,6 +45,7 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import tomllib
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
@@ -1860,6 +1861,11 @@ import json as _json
 
 # Default JSON-Schema file location (sibling of this module).
 _SCHEMA_PATH = Path(__file__).resolve().parent / "schema" / "fj-queue.v1.json"
+# Where an installed wheel (uvx / uv tool install) puts the schema; see
+# [tool.setuptools] data-files in pyproject.toml.
+_INSTALLED_SCHEMA_PATH = (
+    Path(sys.prefix) / "share" / "fj-queue" / "schema" / "fj-queue.v1.json"
+)
 
 
 def _rfc3339_utc_z(dt: datetime) -> str:
@@ -2100,8 +2106,15 @@ def load_schema(path: Path | None = None) -> dict:
     standard read-cache; we do not memoize here because tests sometimes
     override the path.
     """
-    target = path or _SCHEMA_PATH
-    return _json.loads(target.read_text(encoding="utf-8"))
+    if path is not None:
+        return _json.loads(path.read_text(encoding="utf-8"))
+    for candidate in (_SCHEMA_PATH, _INSTALLED_SCHEMA_PATH):
+        if candidate.is_file():
+            return _json.loads(candidate.read_text(encoding="utf-8"))
+    raise ConfigError(
+        "JSON schema not available in this installation (looked for "
+        f"{_SCHEMA_PATH} and {_INSTALLED_SCHEMA_PATH})"
+    )
 
 
 def render_schema(*, indent: int | None = 2) -> str:
@@ -3363,7 +3376,12 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
 
     # --schema short-circuits before any auth/network.
     if args.schema:
-        out.write(render_schema() + "\n")
+        try:
+            out.write(render_schema() + "\n")
+        except ConfigError as e:
+            return _emit_error(
+                e, host="", fmt=args.format, token=None, stdout=out, stderr=err
+            )
         return EXIT_OK
 
     if is_tty is None:
@@ -3503,7 +3521,10 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
     return _run_once(config, args, labels, client=client, stdout=out, stderr=err)
 
 
-if __name__ == "__main__":  # pragma: no cover
-    import sys
-
+def cli() -> None:
+    """Console-script entry point (`fj-queue`, e.g. run via uvx)."""
     sys.exit(main())
+
+
+if __name__ == "__main__":  # pragma: no cover
+    cli()

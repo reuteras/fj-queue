@@ -919,3 +919,33 @@ def test_cli_metrics_failure_degrades_gracefully():
     assert parsed["runner_pods"] == []
     assert parsed["metrics"]["error"] is not None
     assert parsed["metrics"]["error"] != "disabled"
+
+
+# ---------------------------------------------------------------------------
+# Console-script entry point and schema lookup outside a checkout (uvx).
+# ---------------------------------------------------------------------------
+
+
+def test_cli_entry_point_exits_with_main_return_code(monkeypatch):
+    monkeypatch.setattr(fq, "main", lambda: 3)
+    with pytest.raises(SystemExit) as exc:
+        fq.cli()
+    assert exc.value.code == 3
+
+
+def test_schema_falls_back_to_installed_location(monkeypatch, tmp_path):
+    installed = tmp_path / "share" / "fj-queue" / "schema" / "fj-queue.v1.json"
+    installed.parent.mkdir(parents=True)
+    installed.write_text('{"title": "installed"}')
+    monkeypatch.setattr(fq, "_SCHEMA_PATH", tmp_path / "missing.json")
+    monkeypatch.setattr(fq, "_INSTALLED_SCHEMA_PATH", installed)
+    assert fq.load_schema() == {"title": "installed"}
+
+
+def test_schema_flag_without_schema_file_is_clean_usage_error(monkeypatch, tmp_path):
+    monkeypatch.setattr(fq, "_SCHEMA_PATH", tmp_path / "a.json")
+    monkeypatch.setattr(fq, "_INSTALLED_SCHEMA_PATH", tmp_path / "b.json")
+    rc, out, err = _run(["--schema", "--format", "json"])
+    assert rc == fq.EXIT_USAGE
+    assert json.loads(out)["error"]["code"] == "usage"
+    assert "schema not available" in err

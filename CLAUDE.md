@@ -12,7 +12,7 @@ The fork has diverged from upstream in user-visible ways (see `CHANGELOG.md` `[U
 
 ## Running it
 
-Run from the checkout with `uv`; there is no Homebrew install or packaged release in this fork.
+Run from the checkout with `uv`, or straight from GitHub with `uvx --from git+https://github.com/reuteras/fj-queue fj-queue ...` (console script `fj-queue = "fj_queue:cli"` in `pyproject.toml`; the JSON schema ships as a wheel data file under `share/fj-queue/schema/`, and `load_schema` checks the checkout path first, then `sys.prefix`). There is no Homebrew install or tagged release in this fork.
 
 ```bash
 uv run fj_queue.py --host git.example.com              # or ./fj-queue (symlink)

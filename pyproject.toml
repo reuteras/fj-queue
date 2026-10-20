@@ -5,6 +5,10 @@ description = "Forgejo Actions runner & CI queue dashboard"
 requires-python = ">=3.11"
 dependencies = ["httpx", "rich"]
 
+# `uvx --from git+https://github.com/reuteras/fj-queue fj-queue`
+[project.scripts]
+fj-queue = "fj_queue:cli"
+
 # PEP-735 dev dependency group. Pinned so the test suite reproduces
 # byte-for-byte across machines. `rich` and `httpx` are duplicated here
 # (they are already in [project].dependencies) because some test files
@@ -18,6 +22,9 @@ dev = ["jsonschema", "mypy", "pytest", "respx", "ruff", "syrupy"]
 # directory without extra PYTHONPATH plumbing.
 [tool.setuptools]
 py-modules = ["fj_queue"]
+# Ship the JSON Schema with installed copies (uvx / uv tool install) so
+# `--schema` works outside a checkout; load_schema() looks here second.
+data-files = { "share/fj-queue/schema" = ["schema/fj-queue.v1.json"] }
 
 # jsonschema ships no type stubs; it is only used by the contract tests.
 [[tool.mypy.overrides]]

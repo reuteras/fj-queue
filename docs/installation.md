@@ -12,6 +12,25 @@
   which require `is_admin: true`. A non-admin token returns HTTP 403 and the
   tool exits 3.
 
+## Running from GitHub with uvx
+
+No clone needed; `uvx` builds the package from the repository into a cached,
+isolated environment:
+
+```bash
+# Latest commit on main (re-checked on every run)
+uvx --from git+https://github.com/reuteras/fj-queue fj-queue --host git.example.com
+
+# A specific commit (reproducible)
+uvx --from git+https://github.com/reuteras/fj-queue@<commit-sha> fj-queue --host git.example.com
+```
+
+Without a commit, `uvx` checks the branch tip on every run and rebuilds when
+it has moved, so you always run the latest `main`. Pin a commit SHA if you
+want the code to change only when you decide. Dependencies are resolved
+fresh in that environment; the versions in `uv.lock` apply only when running
+from a checkout.
+
 ## Running from a checkout
 
 Clone or copy `fj_queue.py` to any directory, then:

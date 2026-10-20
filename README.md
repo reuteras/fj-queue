@@ -32,6 +32,37 @@ Requirements: Python 3.11+, [`uv`](https://docs.astral.sh/uv/), an
 admin-scoped Forgejo API token, and optionally the
 [1Password CLI](https://developer.1password.com/docs/cli/) (`op`).
 
+Run it straight from GitHub with `uvx`, without cloning:
+
+```bash
+# Latest commit on main (re-checked on every run)
+uvx --from git+https://github.com/reuteras/fj-queue fj-queue --host git.example.com
+
+# A specific commit (reproducible)
+uvx --from git+https://github.com/reuteras/fj-queue@<commit-sha> fj-queue --host git.example.com
+```
+
+`uvx` installs the package into a cached, isolated environment; dependency
+versions are resolved fresh there (`uv.lock` only applies to a checkout).
+
+To have `fj-queue` available as a regular command on your `PATH`, install it
+as a uv tool instead:
+
+```bash
+uv tool install git+https://github.com/reuteras/fj-queue
+fj-queue --host git.example.com
+
+# Later: pull the latest commit from main
+uv tool upgrade fj-queue
+```
+
+Unlike `uvx`, an installed tool stays at the installed commit until you run
+`uv tool upgrade`. Both ways ship the JSON Schema, so `fj-queue --schema`
+works without a checkout.
+
+Or clone the repository and run it from the checkout, which uses the
+versions locked in `uv.lock`:
+
 ```bash
 git clone https://github.com/reuteras/fj-queue.git
 cd fj-queue
