@@ -133,7 +133,7 @@ uv run --frozen --group dev mypy fj_queue.py tests
 pre-commit run --all-files
 ```
 
-CI runs the test suite on Python 3.11 to 3.13 plus ruff and mypy, super-linter
+CI runs the test suite on Python 3.11 to 3.15 plus ruff and mypy, super-linter
 (including Trivy and gitleaks), and OSV-Scanner. Dependencies are updated by
 Dependabot; `uv.lock` holds the exact versions.
 

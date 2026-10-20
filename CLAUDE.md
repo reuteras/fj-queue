@@ -40,7 +40,7 @@ ruff and mypy are in the `dev` dependency group, so their versions come from `uv
 
 ## CI (GitHub Actions)
 
-- `test.yml`: `pytest` on Python 3.11/3.12/3.13 with `uv run --frozen`, plus a `lint` job (ruff check, ruff format --check, mypy). Keep `uv.lock` in sync with `pyproject.toml`.
+- `test.yml`: `pytest` on Python 3.11/3.12/3.13/3.14/3.15 with `uv run --frozen`, plus a `lint` job (ruff check, ruff format --check, mypy). Keep `uv.lock` in sync with `pyproject.toml`.
 - `linter.yml`: super-linter (slim). Includes Trivy (fails on known CVEs in `uv.lock`), yamllint, zizmor/actionlint for workflows, gitleaks, checkov. Ruff/mypy are disabled there.
 - `osv-scanner.yml`: OSV-Scanner on push to `main` + nightly, config in `.osv-scanner.toml`; results go to the Security tab.
 
