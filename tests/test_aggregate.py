@@ -8,19 +8,18 @@ points straight at the broken correctness anchor.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 from pathlib import Path
 
 import pytest
 
 import fj_queue as fq
 
-
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
-NOW = datetime(2026, 5, 27, 14, 3, 11, tzinfo=timezone.utc)
+NOW = datetime(2026, 5, 27, 14, 3, 11, tzinfo=UTC)
 HOST = "git.example.com"
 
 
@@ -95,7 +94,7 @@ def test_naive_datetime_rejected():
     """A naive (no-tzinfo) `now` would emit a non-RFC3339 string in M3.
     Fail loud at the boundary, not in a downstream snapshot diff.
     """
-    naive = datetime(2026, 5, 27, 14, 0, 0)  # no tzinfo
+    naive = datetime(2026, 5, 27, 14, 0, 0)  # noqa: DTZ001 (deliberately naive)
     with pytest.raises(ValueError, match="timezone-aware"):
         fq.aggregate(
             runners=(),
@@ -798,7 +797,7 @@ def test_clock_injection_as_of_round_trips_exactly():
     byte-for-byte. The clock MUST be the injected datetime, never read
     from time.time() / datetime.now() / etc.
     """
-    frozen = datetime(2026, 5, 27, 18, 30, 0, tzinfo=timezone.utc)
+    frozen = datetime(2026, 5, 27, 18, 30, 0, tzinfo=UTC)
     snap = fq.aggregate(
         runners=(),
         jobs=(),
@@ -808,7 +807,7 @@ def test_clock_injection_as_of_round_trips_exactly():
     )
     assert snap.as_of == frozen
     # Identity-preserving (same UTC offset, same microsecond).
-    assert snap.as_of.tzinfo is timezone.utc
+    assert snap.as_of.tzinfo is UTC
 
 
 def test_live_fixture_aggregates_consistently():

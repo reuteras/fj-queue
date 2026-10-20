@@ -12,24 +12,7 @@
   which require `is_admin: true`. A non-admin token returns HTTP 403 and the
   tool exits 3.
 
-## Install with Homebrew (recommended)
-
-```bash
-brew tap vtmocanu/tap
-brew install fj-queue
-```
-
-The formula pulls in `uv` and a pinned Python automatically, so the only
-remaining requirement is an admin-scoped Forgejo token (below). Invoke it as
-`fj-queue`:
-
-```bash
-fj-queue --host git.example.com
-```
-
-`brew upgrade fj-queue` moves to the latest release.
-
-## Running from a checkout (no install)
+## Running from a checkout
 
 Clone or copy `fj_queue.py` to any directory, then:
 

@@ -1,18 +1,22 @@
+---
 repos:
-  - repo: https://github.com/astral-sh/ruff-pre-commit
-    rev: 44b5042edab9382aba712eed4f9c7bab7a3d6a3e # v0.17.0
-    hooks:
-      - id: ruff-check
-      - id: ruff-format
-
+  # ruff and mypy run from the project's uv environment so their versions
+  # come from uv.lock (the same versions CI uses in test.yml).
   - repo: local
     hooks:
+      - id: ruff-check
+        name: ruff check
+        entry: uv run --frozen --group dev ruff check --force-exclude
+        language: system
+        types_or: [python, pyi]
+      - id: ruff-format
+        name: ruff format
+        entry: uv run --frozen --group dev ruff format --force-exclude
+        language: system
+        types_or: [python, pyi]
       - id: mypy
         name: mypy
-        # Run inside the project's own uv-managed venv so mypy sees the
-        # exact dependency versions pinned in uv.lock instead of a
-        # separately resolved isolated environment.
-        entry: uv run --extra dev mypy .
+        entry: uv run --frozen --group dev mypy fj_queue.py tests
         language: system
         pass_filenames: false
         types: [python]
@@ -23,6 +27,6 @@ repos:
       - id: betterleaks
 
   - repo: https://github.com/igorshubovych/markdownlint-cli
-    rev: v0.49.1
+    rev: 5b5dddc4fb0f83c3ea1fc5616fa63e115dce83e0 # v0.49.1
     hooks:
       - id: markdownlint

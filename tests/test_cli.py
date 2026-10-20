@@ -24,7 +24,6 @@ import respx
 
 import fj_queue as fq
 
-
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 
@@ -154,12 +153,12 @@ def test_version_flag_exits_zero(capsys):
 
 
 def test_watch_and_once_are_mutually_exclusive():
-    rc, out, err = _run(["--watch", "--once"])
+    rc, _out, _err = _run(["--watch", "--once"])
     assert rc == fq.EXIT_USAGE  # argparse usage error
 
 
 def test_mode_and_watch_alias_mutually_exclusive():
-    rc, out, err = _run(["--mode", "once", "--watch"])
+    rc, _out, _err = _run(["--mode", "once", "--watch"])
     assert rc == fq.EXIT_USAGE
 
 
@@ -187,7 +186,7 @@ def test_json_format_forces_once_even_with_watch_flag():
 def test_default_mode_once_when_not_tty():
     """No explicit mode + piped stdout (is_tty False) -> once (no
     infinite loop on `fj-queue > file`)."""
-    rc, out, err = _run(["--format", "plain"], client=_typical_client(), is_tty=False)
+    rc, out, _err = _run(["--format", "plain"], client=_typical_client(), is_tty=False)
     assert rc == fq.EXIT_OK
     assert "TOTALS:" in out  # rendered a single snapshot
 
@@ -225,7 +224,7 @@ def test_json_error_envelope_on_auth_failure():
 
 def test_json_error_envelope_on_connection_failure():
     client = FakeClient(error=fq.ConnectionError("timeout"))
-    rc, out, err = _run(["--format", "json"], client=client)
+    rc, out, _err = _run(["--format", "json"], client=client)
     assert rc == fq.EXIT_CONNECTION
     parsed = json.loads(out)
     assert parsed["error"]["code"] == "connection"
@@ -361,7 +360,7 @@ def test_repo_filter_scopes_queue_only_totals_stay_instance_wide():
     repos; --repo owner-c/theme-api keeps only that repo's job in
     queue but the global totals remain unchanged.
     """
-    rc, out, err = _run(
+    rc, out, _err = _run(
         ["--format", "json", "--repo", "owner-c/theme-api"],
         client=_typical_client(),
     )
@@ -399,7 +398,7 @@ def test_repo_filter_preserves_global_positions_with_gaps():
         ],
         repos={85: "alpha/repo", 99: "other/repo"},
     )
-    rc, out, err = _run(["--format", "json", "--repo", "alpha/repo"], client=client)
+    rc, out, _err = _run(["--format", "json", "--repo", "alpha/repo"], client=client)
     assert rc == fq.EXIT_OK
     parsed = json.loads(out)
     positions = [j["position"] for j in parsed["queue"]]
@@ -421,7 +420,7 @@ def test_repo_filter_keeps_warnings_for_other_repos():
         ],
         repos={85: "alpha/repo", 99: "stuck/repo"},
     )
-    rc, out, err = _run(
+    rc, out, _err = _run(
         ["--format", "json", "--repo", "alpha/repo"],
         client=client,
     )
@@ -439,7 +438,7 @@ def test_label_filter_subset_semantics():
     Job 80239 (runs_on=[grunt]) matches --label grunt; 79969
     (runs_on=[special]) does not. totals stay instance-wide.
     """
-    rc, out, err = _run(
+    rc, out, _err = _run(
         ["--format", "json", "--label", "grunt"],
         client=_typical_client(),
     )
@@ -473,7 +472,7 @@ def test_label_filter_preserves_global_positions():
         ],
         repos={85: "x/y"},
     )
-    rc, out, err = _run(["--format", "json", "--label", "grunt"], client=client)
+    _rc, out, _err = _run(["--format", "json", "--label", "grunt"], client=client)
     parsed = json.loads(out)
     positions = [j["position"] for j in parsed["queue"]]
     assert positions == [1, 3]
@@ -493,7 +492,7 @@ def test_label_repeatable_requires_all():
         ],
         repos={85: "x/y"},
     )
-    rc, out, err = _run(
+    _rc, out, _err = _run(
         ["--format", "json", "--label", "grunt", "--label", "docker"],
         client=client,
     )
@@ -504,7 +503,7 @@ def test_label_repeatable_requires_all():
 
 
 def test_no_filter_echoes_null():
-    rc, out, err = _run(["--format", "json"], client=_typical_client())
+    _rc, out, _err = _run(["--format", "json"], client=_typical_client())
     parsed = json.loads(out)
     assert parsed["filter"] == {"repo": None, "label": None}
 
@@ -515,14 +514,14 @@ def test_no_filter_echoes_null():
 
 
 def test_plain_once_renders_to_stdout():
-    rc, out, err = _run(["--format", "plain", "--once"], client=_typical_client())
+    rc, out, _err = _run(["--format", "plain", "--once"], client=_typical_client())
     assert rc == fq.EXIT_OK
     assert "RUNNERS (" in out
     assert "QUEUE (" in out
 
 
 def test_rich_once_renders_to_stdout():
-    rc, out, err = _run(["--format", "rich", "--once"], client=_typical_client())
+    rc, out, _err = _run(["--format", "rich", "--once"], client=_typical_client())
     assert rc == fq.EXIT_OK
     # Rich Console output includes the snapshot panel title.
     assert "snapshot" in out
@@ -534,7 +533,7 @@ def test_rich_once_renders_to_stdout():
 
 
 def test_host_flag_reaches_json_output():
-    rc, out, err = _run(
+    _rc, out, _err = _run(
         ["--format", "json", "--host", "git.example.com"],
         client=_typical_client(),
     )
@@ -751,7 +750,7 @@ def test_cli_no_metrics_sets_disabled_marker():
     is distinguishable from a successful fetch that found zero pods
     (metrics.error=null).
     """
-    rc, out, err = _run(
+    rc, out, _err = _run(
         ["--format", "json", "--once", "--no-metrics"],
         client=_typical_client(),
     )
@@ -771,7 +770,7 @@ def test_cli_metrics_enabled_populates_runner_pods():
         url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
     ).mock(side_effect=_prom_handler())
 
-    rc, out, err = _run(
+    rc, out, _err = _run(
         ["--format", "json", "--once", "--metrics",
          "--metrics-url", "https://prometheus.example.com"],
         client=_typical_client(),
@@ -797,7 +796,7 @@ def test_cli_metrics_and_ncps_both_enabled():
         url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
     ).mock(side_effect=_prom_handler())
 
-    rc, out, err = _run(
+    rc, out, _err = _run(
         ["--format", "json", "--once", "--metrics", "--ncps",
          "--metrics-url", "https://prometheus.example.com"],
         client=_typical_client(),
@@ -815,7 +814,7 @@ def test_cli_metrics_and_ncps_both_enabled():
 
 def test_cli_no_metrics_sets_ncps_disabled():
     """--no-metrics: ncps is null and ncps_error is 'disabled' (both off)."""
-    rc, out, err = _run(
+    rc, out, _err = _run(
         ["--format", "json", "--once", "--no-metrics"],
         client=_typical_client(),
     )
@@ -834,7 +833,7 @@ def test_cli_metrics_failure_degrades_gracefully():
         url__regex=r"https://prometheus\.example\.com/api/v1/query.*"
     ).mock(return_value=httpx.Response(500, text="boom"))
 
-    rc, out, err = _run(
+    rc, out, _err = _run(
         ["--format", "json", "--once", "--metrics",
          "--metrics-url", "https://prometheus.example.com"],
         client=_typical_client(),

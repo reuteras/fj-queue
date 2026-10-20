@@ -11,13 +11,18 @@ dependencies = ["httpx", "rich"]
 # import them directly and `uv run --group dev pytest tests/` resolves
 # the dev group as a standalone environment.
 [dependency-groups]
-dev = ["jsonschema", "pytest", "respx", "syrupy"]
+dev = ["jsonschema", "mypy", "pytest", "respx", "ruff", "syrupy"]
 
 # Surface fj_queue.py as a top-level module so `pytest tests/` and
 # `python -c "import fj_queue"` both work from the scripts/fj-queue/
 # directory without extra PYTHONPATH plumbing.
 [tool.setuptools]
 py-modules = ["fj_queue"]
+
+# jsonschema ships no type stubs; it is only used by the contract tests.
+[[tool.mypy.overrides]]
+module = ["jsonschema", "jsonschema.*"]
+ignore_missing_imports = true
 
 [build-system]
 requires = ["setuptools>=68"]

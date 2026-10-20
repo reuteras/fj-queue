@@ -31,6 +31,7 @@ Consequences: the public repo carries environment-specific references, every ext
 ## Design notes
 
 - **Config schema (TOML), example values only:**
+
   ```toml
   host = "git.example.com"           # no private default ships
 
@@ -43,6 +44,7 @@ Consequences: the public repo carries environment-specific references, every ext
   [ncps]                             # independent of [metrics]
   enabled = true
   ```
+
 - **Host resolution:** if no host is provided by flag, env (`FORGEJO_HOST`), or config, exit 2 with a message pointing at `--host` / `$FORGEJO_HOST` / the config file. No private host is ever the silent default. `EXIT_USAGE`/`ConfigError` and the `resolve_token` env-precedence helper already exist; add a `resolve_host` mirror.
 - **NCPS/metrics decoupling (required — they are coupled today).** The NCPS fetch currently lives *inside* the `if config.metrics_enabled:` branch in `_do_one_fetch`, and there is no `ncps_enabled` field or `--ncps` flag. M3 must add `Config.ncps_enabled`, a `--ncps` flag, restructure `_do_one_fetch` so NCPS fetches independently of `metrics_enabled`, and give NCPS its own disabled representation — today `ncps: null` is overloaded (means metrics-disabled *and* NCPS-fetch-failed); the `--ncps`-off case needs to be distinguishable (or the overload must be documented as intentional).
 - **Cluster blue/green generalization.** The current `--metrics-cluster {auto,green,blue}` enum and the hardcoded `k8s-{cluster}-` node-prefix filter are environment-specific. Replace the enum with a free-form `node_prefix` string (config/flag); update the `--metrics-cluster`/`--node-prefix` help text and the `PodResource` schema field description (which still names the old prefixes).

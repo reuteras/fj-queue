@@ -22,7 +22,6 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
-
 # Root of the repository (parent of the tests/ directory).
 REPO_ROOT = Path(__file__).resolve().parent.parent
 

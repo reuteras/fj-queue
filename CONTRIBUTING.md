@@ -32,15 +32,20 @@ There are many ways to contribute:
 
 1. **Fork the repository** on GitHub
 2. **Clone your fork** locally:
+
    ```bash
    git clone https://github.com/YOUR_USERNAME/fj-queue.git
    cd fj-queue
    ```
+
 3. **Add upstream remote**:
+
    ```bash
    git remote add upstream https://github.com/vtmocanu/fj-queue
    ```
+
 4. **Install dependencies**:
+
    ```bash
    uv sync --group dev
    ```
@@ -48,6 +53,7 @@ There are many ways to contribute:
 ## Development Workflow
 
 1. **Create a branch** for your changes:
+
    ```bash
    git checkout -b feature/your-feature-name
    ```
@@ -57,11 +63,13 @@ There are many ways to contribute:
 3. **Test your changes** - Run `uv run --group dev pytest tests/`
 
 4. **Commit your changes**:
+
    ```bash
    git commit -m "Description of your changes"
    ```
 
 5. **Push to your fork**:
+
    ```bash
    git push origin feature/your-feature-name
    ```

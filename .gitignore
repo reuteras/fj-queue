@@ -2,7 +2,7 @@
 *.egg-info/
 __pycache__/
 .pytest_cache/
-# Release build artifacts (generated Homebrew formula)
+# Build artifacts
 dist/
 # IDEs
 .cursor
@@ -11,7 +11,3 @@ dist/
 *.pyc
 # Env files
 .env
-# Claude
-.claude/agent-team-tasks/
-.claude/scheduled_tasks.lock
-.claude/skill-stats.json

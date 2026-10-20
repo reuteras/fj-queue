@@ -5,12 +5,13 @@ name: OSV-Scanner Scheduled Scan
 on:
   schedule:
     - cron: "30 2 * * *"
-  # Change "main" to your default branch if you use a different name, i.e. "master"
+  # Scan every push to the default branch as well as nightly.
   push:
     branches: [main]
 
 permissions:
-  # Required to upload SARIF file to CodeQL. See: https://github.com/github/codeql-action/issues/2117
+  # Required to upload SARIF file to CodeQL.
+  # See https://github.com/github/codeql-action/issues/2117
   actions: read
   # Require writing security events to upload SARIF file to security tab
   security-events: write
@@ -19,6 +20,7 @@ permissions:
 
 jobs:
   scan-scheduled:
+    # yamllint disable-line rule:line-length
     uses: google/osv-scanner-action/.github/workflows/osv-scanner-reusable.yml@b1d267aea5211fa648d9d442fa64b90dbdcbdd36 # v2.7.0
     with:
       scan-args: |-

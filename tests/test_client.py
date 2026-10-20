@@ -15,6 +15,7 @@ file is the M1 floor.
 from __future__ import annotations
 
 import json
+from datetime import UTC
 from pathlib import Path
 
 import httpx
@@ -22,7 +23,6 @@ import pytest
 import respx
 
 import fj_queue as fq
-
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -286,9 +286,8 @@ def test_fetch_runners_refuses_cross_host_next_link():
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(return_value=httpx.Response(200, json=page1, headers={"Link": evil_link}))
 
-    with fq.Client(_cfg()) as c:
-        with pytest.raises(fq.SchemaDrift, match="cross-host"):
-            c.fetch_runners()
+    with fq.Client(_cfg()) as c, pytest.raises(fq.SchemaDrift, match="cross-host"):
+        c.fetch_runners()
 
 
 @respx.mock
@@ -310,9 +309,8 @@ def test_fetch_runners_refuses_http_downgrade_next_link():
         )
     )
 
-    with fq.Client(_cfg()) as c:
-        with pytest.raises(fq.SchemaDrift, match="non-https"):
-            c.fetch_runners()
+    with fq.Client(_cfg()) as c, pytest.raises(fq.SchemaDrift, match="non-https"):
+        c.fetch_runners()
 
 
 @pytest.mark.parametrize(
@@ -499,8 +497,8 @@ def test_fetch_jobs_null_payload_aggregates_to_empty_snapshot_exit_zero():
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(return_value=httpx.Response(200, json=[]))
 
-    from datetime import datetime, timezone
-    now = datetime(2026, 5, 28, 12, 0, 0, tzinfo=timezone.utc)
+    from datetime import datetime
+    now = datetime(2026, 5, 28, 12, 0, 0, tzinfo=UTC)
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
         jobs = c.fetch_jobs()
@@ -616,9 +614,8 @@ def test_runners_401_raises_auth_error():
     respx.get(
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(return_value=httpx.Response(401, json={"message": "nope"}))
-    with fq.Client(_cfg()) as c:
-        with pytest.raises(fq.AuthError):
-            c.fetch_runners()
+    with fq.Client(_cfg()) as c, pytest.raises(fq.AuthError):
+        c.fetch_runners()
 
 
 @respx.mock
@@ -626,9 +623,8 @@ def test_runners_403_raises_auth_error():
     respx.get(
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(return_value=httpx.Response(403, json={"message": "needs admin"}))
-    with fq.Client(_cfg()) as c:
-        with pytest.raises(fq.AuthError):
-            c.fetch_runners()
+    with fq.Client(_cfg()) as c, pytest.raises(fq.AuthError):
+        c.fetch_runners()
 
 
 @respx.mock
@@ -636,9 +632,8 @@ def test_runners_500_raises_connection_error():
     respx.get(
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(return_value=httpx.Response(503, text="upstream"))
-    with fq.Client(_cfg()) as c:
-        with pytest.raises(fq.ConnectionError):
-            c.fetch_runners()
+    with fq.Client(_cfg()) as c, pytest.raises(fq.ConnectionError):
+        c.fetch_runners()
 
 
 @respx.mock
@@ -646,9 +641,8 @@ def test_runners_429_raises_connection_error():
     respx.get(
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(return_value=httpx.Response(429, text="slow down"))
-    with fq.Client(_cfg()) as c:
-        with pytest.raises(fq.ConnectionError):
-            c.fetch_runners()
+    with fq.Client(_cfg()) as c, pytest.raises(fq.ConnectionError):
+        c.fetch_runners()
 
 
 @respx.mock
@@ -656,9 +650,8 @@ def test_runners_timeout_raises_connection_error():
     respx.get(
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(side_effect=httpx.TimeoutException("slow"))
-    with fq.Client(_cfg()) as c:
-        with pytest.raises(fq.ConnectionError):
-            c.fetch_runners()
+    with fq.Client(_cfg()) as c, pytest.raises(fq.ConnectionError):
+        c.fetch_runners()
 
 
 @respx.mock
@@ -672,9 +665,8 @@ def test_runners_connection_refused_raises_connection_error():
     respx.get(
         url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
     ).mock(side_effect=httpx.ConnectError("Connection refused"))
-    with fq.Client(_cfg()) as c:
-        with pytest.raises(fq.ConnectionError):
-            c.fetch_runners()
+    with fq.Client(_cfg()) as c, pytest.raises(fq.ConnectionError):
+        c.fetch_runners()
 
 
 # ---------------------------------------------------------------------------
@@ -1296,7 +1288,7 @@ def test_fetch_ncps_status_interpolates_rate_window():
 
 
 def test_safe_text_replaces_control_and_bidi_chars():
-    raw = "a\x1b]52;c;ZXZpbA==\x07b\x9b2Jc‮d\r\ne\tf"
+    raw = "a\x1b]52;c;ZXZpbA==\x07b\x9b2Jc\u202ed\r\ne\tf"
     assert fq._safe_text(raw) == "a?]52;c;ZXZpbA==?b?2Jc?d??e?f"
     assert fq._safe_text("plain ünïcode 🚀") == "plain ünïcode 🚀"
 
@@ -1315,7 +1307,7 @@ def test_normalize_job_sanitizes_server_strings():
 def test_normalize_runner_sanitizes_server_strings():
     r = fq._normalize_runner({
         "id": 1, "name": "r\x1b", "status": "idle",
-        "version": "v\x9b", "labels": ["l⁦"],
+        "version": "v\x9b", "labels": ["l\u2066"],
     })
     assert (r.name, r.version, r.labels) == ("r?", "v?", ("l?",))
 

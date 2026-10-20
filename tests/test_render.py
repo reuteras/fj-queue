@@ -14,18 +14,15 @@ console width.
 from __future__ import annotations
 
 import io
-from datetime import datetime, timezone
-
-import pytest
+from datetime import UTC, datetime
 
 import fj_queue as fq
-
 
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-NOW = datetime(2026, 5, 27, 14, 3, 11, tzinfo=timezone.utc)
+NOW = datetime(2026, 5, 27, 14, 3, 11, tzinfo=UTC)
 HOST = "git.example.com"
 
 
@@ -301,6 +298,7 @@ def test_rich_no_color_when_no_color_env_is_set(monkeypatch):
     We assert the strict, spec-compliant thing: no color SGR codes.
     """
     import re
+
     from rich.console import Console
 
     monkeypatch.setenv("NO_COLOR", "1")

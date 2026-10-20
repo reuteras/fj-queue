@@ -17,19 +17,17 @@ exits cleanly, sleep is injected (no real sleep in tests).
 from __future__ import annotations
 
 import io
-from datetime import datetime, timezone
-from typing import Callable
+from collections.abc import Callable
+from datetime import UTC, datetime, timezone
 
 import pytest
 
 import fj_queue as fq
 
-
 # ---------------------------------------------------------------------------
 # Fixtures
 # ---------------------------------------------------------------------------
 
-UTC = timezone.utc
 T0 = datetime(2026, 5, 27, 14, 3, 11, tzinfo=UTC)
 HOST = "git.example.com"
 

@@ -19,7 +19,7 @@ envelope shape, and non-FjQueueError fallback.
 from __future__ import annotations
 
 import json
-from datetime import datetime, timezone
+from datetime import UTC, datetime, timezone
 from pathlib import Path
 
 import jsonschema
@@ -27,12 +27,11 @@ import pytest
 
 import fj_queue as fq
 
-
 # ---------------------------------------------------------------------------
 # Fixtures and helpers
 # ---------------------------------------------------------------------------
 
-NOW = datetime(2026, 5, 27, 14, 3, 11, tzinfo=timezone.utc)
+NOW = datetime(2026, 5, 27, 14, 3, 11, tzinfo=UTC)
 HOST = "git.example.com"
 
 
@@ -316,13 +315,7 @@ def test_render_json_is_byte_stable_under_frozen_clock():
     assert a == b
     # And keys at the top level appear in sorted order (sort_keys=True).
     parsed = json.loads(a)
-    top_keys_in_string = [
-        line.strip().rstrip(":").strip('"')
-        for line in a.split("\n")
-        if line.startswith("  \"") and line.rstrip().endswith(":") is False
-    ]
-    # Above heuristic is fragile, so use a direct check: re-render with
-    # sort_keys and compare; both should equal a.
+    # Re-render with sort_keys and compare; both should equal a.
     assert json.dumps(parsed, sort_keys=True, indent=2) == a
 
 
@@ -625,7 +618,7 @@ def test_schema_accepts_unknown_inner_object_keys(schema):
 
 def test_rfc3339_helper_rejects_naive_datetime():
     with pytest.raises(ValueError, match="timezone-aware"):
-        fq._rfc3339_utc_z(datetime(2026, 1, 1, 0, 0, 0))
+        fq._rfc3339_utc_z(datetime(2026, 1, 1, 0, 0, 0))  # noqa: DTZ001 (deliberately naive)
 
 
 def test_rfc3339_helper_normalizes_non_utc_offset_to_utc():

@@ -27,14 +27,12 @@ from __future__ import annotations
 import io
 import json
 import time
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 
 import fj_queue as fq
 
-
-UTC = timezone.utc
 T0 = datetime(2026, 5, 28, 12, 0, 0, tzinfo=UTC)
 HOST = "git.example.com"
 
@@ -64,6 +62,7 @@ def _big_fixture(n_jobs: int = 2000, n_repos: int = 50, n_runners: int = 30):
     they don't end up in the queue).
     """
     runners = []
+    labels: tuple[str, ...]
     for rid in range(1, n_runners + 1):
         # 20 active, 10 offline; labels cycle so superset matching has work.
         status = "active" if rid % 3 != 0 else "offline"
@@ -85,6 +84,7 @@ def _big_fixture(n_jobs: int = 2000, n_repos: int = 50, n_runners: int = 30):
         )
 
     jobs = []
+    runs_on: tuple[str, ...]
     for jid in range(1, n_jobs + 1):
         repo_id = ((jid - 1) % n_repos) + 1
         status = "waiting" if jid % 2 == 0 else "running"

@@ -2,7 +2,7 @@
 
 A read-only Forgejo Actions runner and CI queue dashboard.
 
-[![CI](https://github.com/vtmocanu/fj-queue/actions/workflows/test.yml/badge.svg)](https://github.com/vtmocanu/fj-queue/actions/workflows/test.yml)
+[![CI](https://github.com/reuteras/fj-queue/actions/workflows/test.yml/badge.svg)](https://github.com/reuteras/fj-queue/actions/workflows/test.yml)
 [![Python 3.11+](https://img.shields.io/badge/python-3.11%2B-blue)](https://www.python.org/)
 [![License: MIT](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
@@ -23,27 +23,19 @@ Designed for two audiences:
 
 ## Quick Start
 
-Install with [Homebrew](https://brew.sh):
-
-```bash
-brew tap vtmocanu/tap
-brew trust vtmocanu/tap    # Homebrew 6.0+ requires trusting third-party taps
-brew install fj-queue
-```
-
-(On Homebrew older than 6.0, skip the `brew trust` line. `brew trust --formula vtmocanu/tap/fj-queue` scopes trust to just this formula.)
-
-This pulls in `uv` and Python automatically. Then run:
+Clone the repository and run it with [`uv`](https://docs.astral.sh/uv/),
+which resolves the dependencies on first run (`./fj-queue` is a symlink to
+`fj_queue.py`):
 
 ```bash
 # Single snapshot
-fj-queue --host git.example.com
+uv run fj_queue.py --host git.example.com
 
 # Live dashboard (default at a TTY)
-fj-queue --host git.example.com --mode watch
+uv run fj_queue.py --host git.example.com --mode watch
 
 # Agent: JSON output piped to jq
-fj-queue --host git.example.com --format json | jq '.totals'
+uv run fj_queue.py --host git.example.com --format json | jq '.totals'
 ```
 
 Provide an **admin-scoped** Forgejo API token via `$FORGEJO_TOKEN`, or store
@@ -51,8 +43,7 @@ it in 1Password and point the config file at it with
 `token_ref = "op://Vault/Item/field"` (read with the `op` CLI). A non-admin
 token exits 3.
 
-Prefer running from a checkout without installing (`uv run fj_queue.py`)? See
-[Installation](docs/installation.md).
+See [Installation](docs/installation.md) for requirements and token setup.
 
 For persistent settings, create `~/.config/fj-queue/config.toml` (or pass
 any file with `--config PATH`; `./fj-queue.toml` is not auto-loaded):

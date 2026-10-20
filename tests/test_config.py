@@ -21,15 +21,12 @@ from __future__ import annotations
 
 import io
 import json
-import os
-from pathlib import Path
 
 import httpx
 import pytest
 import respx
 
 import fj_queue as fq
-
 
 # ---------------------------------------------------------------------------
 # resolve_host

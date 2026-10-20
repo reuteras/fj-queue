@@ -4,7 +4,7 @@
 # requires-python = ">=3.11"
 # dependencies = [
 #     "httpx==0.28.1",
-#     "rich==13.9.4",
+#     "rich==15.0.0",
 # ]
 # ///
 
@@ -40,18 +40,20 @@ to stable internal names on the frozen dataclasses below.
 
 from __future__ import annotations
 
+import math
 import os
 import re
 import shutil
 import subprocess
 import tomllib
-from dataclasses import dataclass, field, replace
-from datetime import datetime, timezone
-from typing import Iterable, Literal, Mapping
+from collections.abc import Callable, Iterable, Mapping
+from dataclasses import dataclass, replace
+from datetime import UTC, datetime
+from pathlib import Path
+from typing import Literal, Self, TypeVar
 from urllib.parse import urlsplit
 
 import httpx
-
 
 # ---------------------------------------------------------------------------
 # Exit codes (PRD JSON contract -> Error contract)
@@ -110,7 +112,7 @@ class AuthError(FjQueueError):
     error_code = "auth"
 
 
-class ConnectionError(FjQueueError):  # noqa: A001 (intentional shadow within module)
+class ConnectionError(FjQueueError):
     """Network/HTTP failure: timeout, 5xx, 429, refused, etc."""
 
     exit_code = EXIT_CONNECTION
@@ -376,14 +378,13 @@ def resolve_host(
 def _find_config_file(
     config_arg: str | None = None,
     env: Mapping[str, str] | None = None,
-) -> "Path | None":  # lazy string annotation avoids importing Path at module level
+) -> Path | None:
     """Return the Path to the config file, or None if no file is found.
 
     When `config_arg` is supplied (from --config PATH) and the file
     does not exist, raises ConfigError so the CLI can report it cleanly.
     Auto-discovered paths that are absent are silently skipped.
     """
-    from pathlib import Path  # _Path alias only defined later in this module
 
     if env is None:
         env = os.environ
@@ -676,7 +677,7 @@ class Client:
         self._repo_cache: dict[int, str] = {}
 
     # context manager support so `with Client(cfg) as c:` closes the transport
-    def __enter__(self) -> "Client":
+    def __enter__(self) -> Self:
         return self
 
     def __exit__(self, exc_type, exc, tb) -> None:
@@ -1021,13 +1022,16 @@ def _prom_query_vector(http: httpx.Client, query: str) -> list:
     return result
 
 
-def _prom_scalar_by_pod(result: list, parse) -> dict[str, object]:
+_T = TypeVar("_T")
+
+
+def _prom_scalar_by_pod(result: list, parse: Callable[[str], _T]) -> dict[str, _T]:
     """Build a {pod: parse(value)} map from an instant-vector result.
 
     Series missing a `pod` label or a usable value are skipped (defensive);
     a value that fails `parse` skips that one series, not the whole query.
     """
-    out: dict[str, object] = {}
+    out: dict[str, _T] = {}
     for series in result:
         if not isinstance(series, dict):
             continue
@@ -1074,7 +1078,7 @@ def _prom_scalar(result: list, default: float = 0.0) -> float:
         except (TypeError, ValueError):
             return default
         # NaN (Prometheus emits "NaN" for an empty rate window).
-        if f != f:
+        if math.isnan(f):
             return default
         return f
     return default
@@ -1452,7 +1456,7 @@ class Totals:
 
 
 @dataclass(frozen=True)
-class Warning:  # noqa: A001 (intentional shadow within module; PRD-named)
+class Warning:
     """Structured warning row. Two codes are emitted today:
     `unschedulable_labels` (no online runner can satisfy runs_on -- the
     genuine stuck case) and `wedged_sentinel` (heuristic: a
@@ -1882,11 +1886,9 @@ def aggregate(
 # ===========================================================================
 
 import json as _json
-from pathlib import Path as _Path
-
 
 # Default JSON-Schema file location (sibling of this module).
-_SCHEMA_PATH = _Path(__file__).resolve().parent / "schema" / "fj-queue.v1.json"
+_SCHEMA_PATH = Path(__file__).resolve().parent / "schema" / "fj-queue.v1.json"
 
 
 def _rfc3339_utc_z(dt: datetime) -> str:
@@ -1900,7 +1902,7 @@ def _rfc3339_utc_z(dt: datetime) -> str:
     if dt.tzinfo is None:
         raise ValueError("rfc3339_utc_z requires a timezone-aware datetime")
     # Normalize to UTC if a non-UTC tzinfo was passed.
-    dt = dt.astimezone(timezone.utc)
+    dt = dt.astimezone(UTC)
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -1950,7 +1952,7 @@ def _pod_to_dict(p: PodResource) -> dict:
     }
 
 
-def _ncps_to_dict(n: "NcpsStatus | None") -> dict | None:
+def _ncps_to_dict(n: NcpsStatus | None) -> dict | None:
     """Wire shape for NCPS status. null when disabled/failed; raw numbers
     otherwise (renderers do the req/s, MiB/s, miss/s formatting).
     """
@@ -2121,7 +2123,7 @@ def render_json_error(
     )
 
 
-def load_schema(path: _Path | None = None) -> dict:
+def load_schema(path: Path | None = None) -> dict:
     """Load and parse the JSON Schema. Default location is the sibling
     `schema/fj-queue.v1.json` file. Cached at the OS-page level by
     standard read-cache; we do not memoize here because tests sometimes
@@ -2190,7 +2192,7 @@ def _format_str_list(items: tuple[str, ...] | list[str]) -> str:
     return "[" + ", ".join(items) + "]"
 
 
-def _runner_online_count(snap: "Snapshot") -> int:
+def _runner_online_count(snap: Snapshot) -> int:
     return sum(1 for r in snap.runners if is_online(r))
 
 
@@ -2218,7 +2220,7 @@ def _fmt_mem_cell(usage_bytes: int, limit_bytes: int | None, *, dash: str) -> st
     return f"{_human_bytes(usage_bytes)} / {limit}"
 
 
-def _ncps_summary(snap: "Snapshot") -> tuple[str, str]:
+def _ncps_summary(snap: Snapshot) -> tuple[str, str]:
     """(text, kind) for the NCPS status line. kind is one of
     active/idle/disabled/unavailable/no_data, used by the rich renderer to
     pick a style. Checks snap.ncps_error for the NCPS_DISABLED sentinel
@@ -2241,15 +2243,17 @@ def _ncps_summary(snap: "Snapshot") -> tuple[str, str]:
     n = snap.ncps
     if n.active:
         return (
-            f"active ({n.requests_per_sec:.1f} req/s, "
-            f"{_human_bytes(int(n.bytes_per_sec))}/s, "
-            f"{n.upstream_per_sec:.1f} miss/s)",
+            (
+                f"active ({n.requests_per_sec:.1f} req/s, "
+                f"{_human_bytes(int(n.bytes_per_sec))}/s, "
+                f"{n.upstream_per_sec:.1f} miss/s)"
+            ),
             "active",
         )
     return "idle", "idle"
 
 
-def render_plain(snap: "Snapshot") -> str:
+def render_plain(snap: Snapshot) -> str:
     """Render Snapshot as a no-color, line-oriented text block.
 
     Output is deterministic given a deterministic Snapshot (which M2
@@ -2394,7 +2398,7 @@ def render_plain(snap: "Snapshot") -> str:
     return "\n".join(lines)
 
 
-def render_rich(snap: "Snapshot"):
+def render_rich(snap: Snapshot):
     """Build a Rich Renderable for the snapshot.
 
     Returns a `rich.console.Group` containing a header, totals strip,
@@ -2671,8 +2675,8 @@ def render_rich(snap: "Snapshot"):
 
 
 def _resolve_repos_for_jobs(
-    client: "Client",
-    jobs: "Iterable[RawJob]",
+    client: Client,
+    jobs: Iterable[RawJob],
 ) -> dict[int, str]:
     """Build the repo_id -> slug map a Snapshot needs.
 
@@ -2700,7 +2704,7 @@ def _format_stale_marker(last_good_at: datetime, interval: float) -> str:
     `.0` (`2.0` -> `2`) but preserves fractional values (`2.5` ->
     `2.5`).
     """
-    hms = last_good_at.astimezone(timezone.utc).strftime("%H:%M:%S")
+    hms = last_good_at.astimezone(UTC).strftime("%H:%M:%S")
     return f"STALE (last good {hms} UTC, retrying every {interval:g}s)"
 
 
@@ -2735,7 +2739,7 @@ def _build_error_renderable(
 
 
 def _watch_renderable(
-    snap: "Snapshot",
+    snap: Snapshot,
     stale_marker: str | None,
     *,
     format_mode: str = "rich",
@@ -2772,7 +2776,7 @@ def _watch_renderable(
 
 
 def _job_matches_filters(
-    job: "Job | RunningJob",
+    job: Job | RunningJob,
     repo: str | None,
     labels: tuple[str, ...],
 ) -> bool:
@@ -2789,17 +2793,15 @@ def _job_matches_filters(
     """
     if repo is not None and job.repo != repo:
         return False
-    if labels and not set(labels).issubset(set(job.runs_on)):
-        return False
-    return True
+    return not labels or set(labels).issubset(set(job.runs_on))
 
 
 def _scope_snapshot_queue(
-    snap: "Snapshot",
+    snap: Snapshot,
     *,
     filter_repo: str | None,
     filter_label: tuple[str, ...],
-) -> "Snapshot":
+) -> Snapshot:
     """Apply --repo / --label scoping to `Snapshot.queue` ONLY.
 
     Per PRD §JSON contract (~line 94) and §Progress checkpoint M6
@@ -2825,14 +2827,14 @@ def _scope_snapshot_queue(
 
 
 def _do_one_fetch(
-    client: "Client",
+    client: Client,
     host: str,
     now: datetime,
     *,
     filter_repo: str | None = None,
     filter_label: tuple[str, ...] = (),
-    config: "Config | None" = None,
-) -> "Snapshot":
+    config: Config | None = None,
+) -> Snapshot:
     """One snapshot's worth of fetch + aggregate. Pure failure
     semantics: any exception bubbles untouched so the loop can do
     the retry/stop classification.
@@ -2922,7 +2924,7 @@ def run_watch(
     format_mode: str = "rich",
     filter_repo: str | None = None,
     filter_label: tuple[str, ...] = (),
-    client: "Client | None" = None,
+    client: Client | None = None,
     clock=None,
     sleep_fn=None,
     console=None,
@@ -2984,11 +2986,12 @@ def run_watch(
     """
     import sys as _sys
     import time as _time
+
     from rich.console import Console as _RichConsole
     from rich.live import Live as _RichLive
 
     if clock is None:
-        clock = lambda: datetime.now(timezone.utc)  # noqa: E731
+        clock = lambda: datetime.now(UTC)
     if sleep_fn is None:
         sleep_fn = _time.sleep
     if console is None:
@@ -3358,7 +3361,7 @@ def _run_once(config: Config, args, labels, *, client, stdout, stderr) -> int:
     try:
         c = client if client is not None else Client(config)
         try:
-            now = datetime.now(timezone.utc)
+            now = datetime.now(UTC)
             snap = _do_one_fetch(
                 c,
                 config.host,
