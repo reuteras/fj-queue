@@ -1,10 +1,12 @@
-# fj-queue configuration example: copy to fj-queue.toml or
-# ~/.config/fj-queue/config.toml and adjust for your environment.
+# fj-queue configuration example: copy to ~/.config/fj-queue/config.toml
+# (or anywhere, then pass --config PATH) and adjust for your environment.
 #
 # Precedence (highest wins): CLI flag > environment variable > this file > built-in default.
-# The API token is NEVER stored here. Use --token or $FORGEJO_TOKEN.
+# The API token itself is NEVER stored here. Use $FORGEJO_TOKEN, or reference
+# a 1Password item with token_ref (read via the `op` CLI; $FORGEJO_TOKEN wins).
 
 host = "git.example.com"
+# token_ref = "op://Private/Forgejo admin token/credential"
 
 # Per-pod runner CPU/memory metrics (from Prometheus). OFF by default.
 # A Prometheus URL is required when metrics or ncps is enabled.

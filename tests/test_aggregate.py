@@ -932,3 +932,49 @@ def test_ncps_passes_through_unchanged():
 
 def test_ncps_defaults_to_none_when_omitted():
     assert _agg().ncps is None
+
+
+# ---------------------------------------------------------------------------
+# Snapshot.running (human renderers only; not on the JSON wire).
+# ---------------------------------------------------------------------------
+
+
+def test_running_holds_only_running_jobs_sorted_by_id():
+    jobs = [
+        _job(70, status="running", task_id=900, repo_id=85, attempt=2),
+        _job(60, status="waiting", repo_id=85),
+        _job(50, status="running", task_id=800, repo_id=42),
+    ]
+    snap = _agg(jobs=jobs, repo_names={85: "alpha/repo"})
+    assert [j.job_id for j in snap.running] == [50, 70]
+    first, second = snap.running
+    assert first.repo == "repo#42"  # unresolved id falls back
+    assert first.task_id == 800
+    assert second.repo == "alpha/repo"
+    assert second.attempt == 2
+    # Waiting jobs stay in queue only.
+    assert [j.job_id for j in snap.queue] == [60]
+
+
+def test_running_task_id_zero_normalizes_to_none():
+    snap = _agg(jobs=[_job(5, status="running", task_id=0)])
+    assert snap.running[0].task_id is None
+
+
+def test_running_is_not_in_json_contract():
+    snap = _agg(jobs=[_job(5, status="running", task_id=7)])
+    assert "running" not in fq.to_dict(snap)
+
+
+def test_scope_repo_filters_running_jobs():
+    snap = _make_multi_repo_snapshot()
+    assert [j.job_id for j in snap.running] == [50]
+    kept = fq._scope_snapshot_queue(
+        snap, filter_repo="running/repo", filter_label=()
+    )
+    assert [j.job_id for j in kept.running] == [50]
+    dropped = fq._scope_snapshot_queue(
+        snap, filter_repo="alpha/repo", filter_label=()
+    )
+    assert dropped.running == ()
+    assert dropped.totals == snap.totals

@@ -102,17 +102,15 @@ def _typical_client():
     )
 
 
-def _run(argv, *, client=None, is_tty=False, env_token="tok"):
+def _run(argv, *, client=None, is_tty=False):
     """Invoke main() with captured streams. Returns (rc, stdout, stderr).
 
     Metrics are OFF by default (M2). Tests that exercise the enabled path
     explicitly pass --metrics-url + their own respx mock.
     """
     out, err = io.StringIO(), io.StringIO()
-    # main() resolves the token; default to passing --token so tests
-    # don't depend on the ambient environment.
-    if env_token is not None and "--token" not in argv and "--schema" not in argv:
-        argv = [*argv, "--token", env_token]
+    # main() resolves the token from $FORGEJO_TOKEN, which the autouse
+    # conftest fixture pins to "tok".
     # main() now requires a host (no built-in default). Supply HOST so
     # tests that do not exercise host-resolution behavior stay working.
     # Tests that explicitly pass --host override this injection.
@@ -133,7 +131,7 @@ def _run(argv, *, client=None, is_tty=False, env_token="tok"):
 
 
 def test_schema_flag_prints_schema_and_exits_zero():
-    rc, out, err = _run(["--schema"], env_token=None)
+    rc, out, err = _run(["--schema"])
     assert rc == fq.EXIT_OK
     parsed = json.loads(out)
     assert parsed["title"] == "fj-queue v1 snapshot"
@@ -248,16 +246,17 @@ def test_missing_token_exit_2(monkeypatch):
     assert parsed["error"]["code"] == "usage"
 
 
-def test_main_scrubs_token_from_json_error_envelope():
+def test_main_scrubs_token_from_json_error_envelope(monkeypatch):
     """The M5/M6 caller the scrub_token kwarg was built for: main()
     passes config.token to render_json_error, so a token that leaks
     into an exception message is masked in the stdout envelope.
     """
     secret = "SUPERSECRET_TOKEN_ABC123"
+    monkeypatch.setenv("FORGEJO_TOKEN", secret)
     client = FakeClient(error=fq.ConnectionError(f"boom with {secret} in it"))
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--once", "--token", secret, "--host", HOST],
+        ["--format", "json", "--once", "--host", HOST],
         client=client, stdout=out, stderr=err, is_tty=False,
     )
     assert rc == fq.EXIT_CONNECTION
@@ -267,31 +266,62 @@ def test_main_scrubs_token_from_json_error_envelope():
     assert "***" in parsed["error"]["message"]
 
 
-def test_main_token_arg_beats_env_proven_via_scrub(monkeypatch):
-    """End-to-end token precedence: --token X beats $FORGEJO_TOKEN Y.
-    Proof by scrubbing: only the RESOLVED token is masked in the error
-    envelope. If env had won, the arg token would survive and the env
-    token would be masked. Here the arg token is masked (it won) and
-    the env token survives verbatim.
-    """
-    monkeypatch.setenv("FORGEJO_TOKEN", "ENV_TOKEN_Y")
-    arg_token = "ARG_TOKEN_X"
-    client = FakeClient(
-        error=fq.ConnectionError(f"fail with {arg_token} and ENV_TOKEN_Y")
+def test_token_flag_is_rejected():
+    """--token was removed (argv is visible to every local user via ps).
+    argparse rejects it as an unknown argument with exit 2."""
+    rc = fq.main(
+        ["--format", "json", "--once", "--token", "x", "--host", HOST],
+        stdout=io.StringIO(), stderr=io.StringIO(), is_tty=False,
     )
+    assert rc == fq.EXIT_USAGE
+
+
+def test_main_env_token_beats_config_token_ref(monkeypatch, tmp_path):
+    """$FORGEJO_TOKEN wins over token_ref; `op` is never consulted."""
+    monkeypatch.setenv("FORGEJO_TOKEN", "ENV_TOKEN_Y")
+    monkeypatch.setattr(
+        fq.shutil, "which",
+        lambda _n: pytest.fail("op must not be looked up when env is set"),
+    )
+    cfg = tmp_path / "c.toml"
+    cfg.write_text('token_ref = "op://V/I/f"\n')
+    client = FakeClient(error=fq.ConnectionError("fail with ENV_TOKEN_Y"))
     out, err = io.StringIO(), io.StringIO()
     fq.main(
-        ["--format", "json", "--once", "--token", arg_token, "--host", HOST],
+        ["--format", "json", "--once", "--host", HOST, "--config", str(cfg)],
         client=client, stdout=out, stderr=err, is_tty=False,
     )
-    rendered = out.getvalue()
-    assert arg_token not in rendered          # resolved token -> scrubbed
-    assert "ENV_TOKEN_Y" in rendered          # not resolved -> survives
+    assert "ENV_TOKEN_Y" not in out.getvalue()  # resolved -> scrubbed
+
+
+def test_main_token_ref_resolved_via_op_when_env_unset(monkeypatch, tmp_path):
+    """No $FORGEJO_TOKEN: main() resolves token_ref with `op read` and
+    scrubs the resulting secret from error output."""
+    monkeypatch.delenv("FORGEJO_TOKEN", raising=False)
+    calls = []
+
+    def fake_run(argv, **kw):
+        calls.append(argv)
+        return fq.subprocess.CompletedProcess(argv, 0, "OP_SECRET_Z", "")
+
+    monkeypatch.setattr(fq.shutil, "which", lambda _n: "/usr/bin/op")
+    monkeypatch.setattr(fq.subprocess, "run", fake_run)
+    cfg = tmp_path / "c.toml"
+    cfg.write_text('token_ref = "op://V/I/f"\n')
+    client = FakeClient(error=fq.ConnectionError("fail with OP_SECRET_Z"))
+    out, err = io.StringIO(), io.StringIO()
+    rc = fq.main(
+        ["--format", "json", "--once", "--host", HOST, "--config", str(cfg)],
+        client=client, stdout=out, stderr=err, is_tty=False,
+    )
+    assert rc == fq.EXIT_CONNECTION
+    assert calls == [["/usr/bin/op", "read", "--no-newline", "op://V/I/f"]]
+    assert "OP_SECRET_Z" not in out.getvalue()
+    assert "OP_SECRET_Z" not in err.getvalue()
 
 
 def test_main_env_token_used_when_no_arg(monkeypatch):
-    """No --token: $FORGEJO_TOKEN is the resolved token (and thus the
-    one scrubbed).
+    """$FORGEJO_TOKEN is the resolved token (and thus the one scrubbed).
     """
     monkeypatch.setenv("FORGEJO_TOKEN", "ENV_ONLY_TOKEN")
     client = FakeClient(
@@ -550,17 +580,18 @@ def test_parser_watch_alias_sets_mode():
 # ---------------------------------------------------------------------------
 
 
-def test_stderr_diagnostic_scrubs_token_in_plain_mode():
+def test_stderr_diagnostic_scrubs_token_in_plain_mode(monkeypatch):
     """Audit finding (HIGH): _emit_error must scrub the token from the
     stderr diagnostic, symmetric with the JSON envelope path. A
     `--format plain` run that hits an exception carrying the token in
     its message must NOT leak the literal token to stderr.
     """
     secret = "SUPERSECRET_TOKEN_PLAIN"
+    monkeypatch.setenv("FORGEJO_TOKEN", secret)
     client = FakeClient(error=fq.ConnectionError(f"boom with {secret} embedded"))
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "plain", "--once", "--token", secret, "--host", HOST],
+        ["--format", "plain", "--once", "--host", HOST],
         client=client, stdout=out, stderr=err, is_tty=False,
     )
     assert rc == fq.EXIT_CONNECTION
@@ -570,15 +601,16 @@ def test_stderr_diagnostic_scrubs_token_in_plain_mode():
     assert "fj-queue:" in err_text  # prefix still there
 
 
-def test_stderr_diagnostic_scrubs_token_in_json_mode():
+def test_stderr_diagnostic_scrubs_token_in_json_mode(monkeypatch):
     """The JSON mode already scrubs stdout; the stderr line emitted
     alongside the envelope must also scrub (defense in depth).
     """
     secret = "SUPERSECRET_TOKEN_JSON_STDERR"
+    monkeypatch.setenv("FORGEJO_TOKEN", secret)
     client = FakeClient(error=fq.ConnectionError(f"fail near {secret} now"))
     out, err = io.StringIO(), io.StringIO()
     fq.main(
-        ["--format", "json", "--once", "--token", secret, "--host", HOST],
+        ["--format", "json", "--once", "--host", HOST],
         client=client, stdout=out, stderr=err, is_tty=False,
     )
     assert secret not in err.getvalue()
@@ -641,7 +673,6 @@ def test_malformed_host_crlf_returns_typed_usage_error_json():
         [
             "--format", "json", "--once",
             "--host", "bad\r\nval",
-            "--token", "tok",
         ],
         client=None,  # let main() build Client(config) so InvalidURL fires
         stdout=out, stderr=err, is_tty=False,
@@ -662,7 +693,6 @@ def test_malformed_host_plain_format_still_typed_usage():
         [
             "--format", "plain", "--once",
             "--host", "bad\r\nval",
-            "--token", "tok",
         ],
         client=None, stdout=out, stderr=err, is_tty=False,
     )

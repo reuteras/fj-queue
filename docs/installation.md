@@ -48,18 +48,29 @@ hood.
 
 ## Token setup
 
-Pass the token on the command line:
+There is no `--token` flag (command-line arguments are visible to every
+local user via `ps`). Use one of:
 
-```bash
-uv run fj_queue.py --host git.example.com --token <your-token>
+**1Password** (recommended for interactive use). Store the token in
+1Password, install the [1Password CLI](https://developer.1password.com/docs/cli/)
+(`op`), and reference the secret from your config file
+(`~/.config/fj-queue/config.toml`):
+
+```toml
+host = "git.example.com"
+token_ref = "op://Private/Forgejo admin token/credential"
 ```
 
-Or export it as an environment variable (recommended for scripts):
+fj-queue runs `op read` once at startup; with the 1Password desktop app
+integration this prompts for Touch ID / your password.
+
+**Environment variable** (recommended for scripts and CI; takes precedence
+over `token_ref`):
 
 ```bash
 export FORGEJO_TOKEN=<your-token>
 uv run fj_queue.py --host git.example.com
 ```
 
-The token is never written to a config file. See
+The token itself is never read from a config file. See
 [Configuration](configuration.md) for the full precedence rules.

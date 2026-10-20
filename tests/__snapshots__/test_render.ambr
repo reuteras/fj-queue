@@ -18,6 +18,9 @@
   PER REPO (0 repos):
     (none)
   
+  RUNNING (0):
+    (none)
+  
   QUEUE (0 waiting):
     (empty)
   
@@ -47,6 +50,10 @@
     owner-a/repo-a                    running=1  waiting=0  total=1
     owner-b/harbor                    running=0  waiting=1  total=1
     owner-c/theme-api                 running=0  waiting=2  total=2
+  
+  RUNNING (1):
+    job_id=83886  task_id=85492  repo=owner-a/repo-a  name="Chainsaw E2E Tests"
+          attempt=1  runs_on=[grunt]
   
   QUEUE (3 waiting):
     #1   [unschedulable      ] job_id=79969  repo=owner-b/harbor  name="pipeline"
@@ -79,6 +86,9 @@
   PER REPO (0 repos):
     (none)
   
+  RUNNING (0):
+    (none)
+  
   QUEUE (0 waiting):
     (empty)
   
@@ -105,6 +115,9 @@
   PER REPO (0 repos):
     (none)
   
+  RUNNING (0):
+    (none)
+  
   QUEUE (0 waiting):
     (empty)
   
@@ -128,6 +141,9 @@
   NCPS: disabled
   
   PER REPO (0 repos):
+    (none)
+  
+  RUNNING (0):
     (none)
   
   QUEUE (0 waiting):
@@ -156,6 +172,9 @@
   PER REPO (0 repos):
     (none)
   
+  RUNNING (0):
+    (none)
+  
   QUEUE (0 waiting):
     (empty)
   
@@ -181,6 +200,9 @@
   NCPS: no data
   
   PER REPO (0 repos):
+    (none)
+  
+  RUNNING (0):
     (none)
   
   QUEUE (0 waiting):
@@ -211,6 +233,9 @@
     owner-c/café                      running=0  waiting=1  total=1
     owner-c/测试-repo                   running=0  waiting=1  total=1
   
+  RUNNING (0):
+    (none)
+  
   QUEUE (2 waiting):
     #1   [waiting_for_runner ] job_id=42  repo=owner-c/测试-repo  name="🚀 Deploy"
           attempt=1  runs_on=[测试]  needs=[]
@@ -240,6 +265,9 @@
   
   PER REPO (1 repos):
     owner-b/harbor                    running=0  waiting=1  total=1
+  
+  RUNNING (0):
+    (none)
   
   QUEUE (1 waiting):
     #1   [blocked_on_needs   ] job_id=79969  repo=owner-b/harbor  name="pipeline"
@@ -275,6 +303,12 @@
   ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━┩
   │ (none) │         │         │       │
   └────────┴─────────┴─────────┴───────┘
+                            Running                           
+  ┏━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+  ┃ job_id ┃ task_id ┃ repo   ┃ job_name ┃ attempt ┃ runs_on ┃
+  ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+  │        │         │ (none) │          │         │         │
+  └────────┴─────────┴────────┴──────────┴─────────┴─────────┘
                             Queue (waiting, FIFO approx)                          
   ┏━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━┓
   ┃ # ┃ job_id ┃ repo    ┃ job_name ┃ attempt ┃ runs_on ┃ needs ┃ blocked_reason ┃
@@ -314,6 +348,12 @@
   │ owner-b/harbor    │       0 │       1 │     1 │
   │ owner-c/theme-api │       0 │       2 │     2 │
   └───────────────────┴─────────┴─────────┴───────┘
+                                     Running                                    
+  ┏━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+  ┃ job_id ┃ task_id ┃ repo           ┃ job_name           ┃ attempt ┃ runs_on ┃
+  ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+  │  83886 │   85492 │ owner-a/repo-a │ Chainsaw E2E Tests │       1 │ grunt   │
+  └────────┴─────────┴────────────────┴────────────────────┴─────────┴─────────┘
                                         Queue (waiting, FIFO approx)                                      
   ┏━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━━━━━┓
   ┃ # ┃ job_id ┃ repo              ┃ job_name         ┃   attempt ┃ runs_on ┃ needs ┃ blocked_reason     ┃
@@ -322,12 +362,12 @@
   │ 2 │  80239 │ owner-c/theme-api │ Semantic Release │         1 │ grunt   │ -     │ waiting_for_runner │
   │ 3 │  80300 │ owner-c/theme-api │ Deploy           │ 2 (rerun) │ grunt   │ build │ blocked_on_needs   │
   └───┴────────┴───────────────────┴──────────────────┴───────────┴─────────┴───────┴────────────────────┘
-                                                      Warnings                                                    
-  ┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
-  ┃ code                 ┃ job_id ┃ repo           ┃ runs_on ┃ message                                           ┃
-  ┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
-  │ unschedulable_labels │  79969 │ owner-b/harbor │         │ No online runner can satisfy runs_on: ['special'] │
-  └──────────────────────┴────────┴────────────────┴─────────┴───────────────────────────────────────────────────┘
+                                                       Warnings                                                     
+  ┏━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+  ┃ code                 ┃ job_id ┃ repo           ┃ runs_on   ┃ message                                           ┃
+  ┡━━━━━━━━━━━━━━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+  │ unschedulable_labels │  79969 │ owner-b/harbor │ [special] │ No online runner can satisfy runs_on: ['special'] │
+  └──────────────────────┴────────┴────────────────┴───────────┴───────────────────────────────────────────────────┘
   
   '''
 # ---
@@ -352,6 +392,12 @@
   ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━┩
   │ (none) │         │         │       │
   └────────┴─────────┴─────────┴───────┘
+                            Running                           
+  ┏━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+  ┃ job_id ┃ task_id ┃ repo   ┃ job_name ┃ attempt ┃ runs_on ┃
+  ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+  │        │         │ (none) │          │         │         │
+  └────────┴─────────┴────────┴──────────┴─────────┴─────────┘
                             Queue (waiting, FIFO approx)                          
   ┏━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━┓
   ┃ # ┃ job_id ┃ repo    ┃ job_name ┃ attempt ┃ runs_on ┃ needs ┃ blocked_reason ┃
@@ -387,6 +433,12 @@
   ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━┩
   │ (none) │         │         │       │
   └────────┴─────────┴─────────┴───────┘
+                            Running                           
+  ┏━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+  ┃ job_id ┃ task_id ┃ repo   ┃ job_name ┃ attempt ┃ runs_on ┃
+  ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+  │        │         │ (none) │          │         │         │
+  └────────┴─────────┴────────┴──────────┴─────────┴─────────┘
                             Queue (waiting, FIFO approx)                          
   ┏━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━┓
   ┃ # ┃ job_id ┃ repo    ┃ job_name ┃ attempt ┃ runs_on ┃ needs ┃ blocked_reason ┃
@@ -417,6 +469,12 @@
   ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━┩
   │ (none) │         │         │       │
   └────────┴─────────┴─────────┴───────┘
+                            Running                           
+  ┏━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+  ┃ job_id ┃ task_id ┃ repo   ┃ job_name ┃ attempt ┃ runs_on ┃
+  ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+  │        │         │ (none) │          │         │         │
+  └────────┴─────────┴────────┴──────────┴─────────┴─────────┘
                             Queue (waiting, FIFO approx)                          
   ┏━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━┓
   ┃ # ┃ job_id ┃ repo    ┃ job_name ┃ attempt ┃ runs_on ┃ needs ┃ blocked_reason ┃
@@ -453,6 +511,12 @@
   ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━┩
   │ (none) │         │         │       │
   └────────┴─────────┴─────────┴───────┘
+                            Running                           
+  ┏━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+  ┃ job_id ┃ task_id ┃ repo   ┃ job_name ┃ attempt ┃ runs_on ┃
+  ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+  │        │         │ (none) │          │         │         │
+  └────────┴─────────┴────────┴──────────┴─────────┴─────────┘
                             Queue (waiting, FIFO approx)                          
   ┏━━━┳━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━━━━━┓
   ┃ # ┃ job_id ┃ repo    ┃ job_name ┃ attempt ┃ runs_on ┃ needs ┃ blocked_reason ┃
@@ -488,6 +552,12 @@
   ┡━━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━╇━━━━━━━┩
   │ owner-b/harbor │       0 │       1 │     1 │
   └────────────────┴─────────┴─────────┴───────┘
+                            Running                           
+  ┏━━━━━━━━┳━━━━━━━━━┳━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━┓
+  ┃ job_id ┃ task_id ┃ repo   ┃ job_name ┃ attempt ┃ runs_on ┃
+  ┡━━━━━━━━╇━━━━━━━━━╇━━━━━━━━╇━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━┩
+  │        │         │ (none) │          │         │         │
+  └────────┴─────────┴────────┴──────────┴─────────┴─────────┘
                                                 Queue (waiting, FIFO approx)                                              
   ┏━━━┳━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━┓
   ┃ # ┃ job_id ┃ repo           ┃ job_name ┃   attempt ┃ runs_on ┃ needs                              ┃ blocked_reason   ┃

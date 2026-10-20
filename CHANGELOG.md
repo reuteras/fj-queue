@@ -7,6 +7,50 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
 ---
 
+## [Unreleased]
+
+### Added
+
+- **Running jobs section** in the human renderers (`RUNNING (n):` in plain,
+  a `Running` table in rich): job id, task id, repo, job name, attempt and
+  `runs_on` for every job currently executing. Scoped by `--repo` /
+  `--label` like the queue. Not part of the JSON contract (agents keep
+  using `totals.running` / `per_repo[].running`); no `schema_version` bump.
+
+- **1Password token support.** `token_ref = "op://Vault/Item/field"` in the
+  config file is resolved at startup with `op read --no-newline` (argv, no
+  shell, 30 s timeout; must start with `op://`). `$FORGEJO_TOKEN` still
+  takes precedence and `op` is not invoked when it is set. A literal `token`
+  key in the config file remains ignored.
+
+### Removed
+
+- **Breaking: `--token` flag.** Command-line arguments are visible to every
+  local user via `ps`. Use `$FORGEJO_TOKEN` or `token_ref`. Passing
+  `--token` now exits 2 (unrecognized argument).
+
+### Security
+
+- **Breaking: `./fj-queue.toml` is no longer auto-discovered.** The config
+  file sets `host`, and `$FORGEJO_TOKEN` is sent to that host, so a
+  `fj-queue.toml` planted in a cloned repository could capture the admin
+  token. Discovery is now `--config PATH`, then
+  `$XDG_CONFIG_HOME/fj-queue/config.toml`, then
+  `~/.config/fj-queue/config.toml`. Pass `--config ./fj-queue.toml` to keep
+  using a local file.
+- **Server-supplied text is no longer interpreted as Rich markup.** A job,
+  runner, repo or label name containing `[...]` could restyle or spoof
+  dashboard rows, inject links, or (with an unbalanced closing tag such as
+  `[/x]`) crash the rich renderer and the watch loop.
+- **Terminal control characters are neutralized.** C0/C1 control
+  characters (including ESC) and Unicode bidi override characters in
+  server-supplied strings (job/runner/repo names, labels, versions, pod
+  and node names) are replaced with `?` at parse time, so escape sequences
+  (OSC 52 clipboard writes, OSC 8 links, cursor movement) cannot reach the
+  terminal through any output format.
+
+---
+
 ## [0.2.0] - 2026-06-10
 
 ### Added

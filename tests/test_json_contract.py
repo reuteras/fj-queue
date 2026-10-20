@@ -489,7 +489,7 @@ def test_error_envelope_no_scrub_when_token_kwarg_omitted():
     exceptions never embed the token; the kwarg is opt-in defense for
     M5/M6 callers that have a Config in scope.
     """
-    exc = fq.AuthError("401 unauthorized: check --token / FORGEJO_TOKEN")
+    exc = fq.AuthError("401 unauthorized: check FORGEJO_TOKEN / token_ref")
     rendered = fq.render_json_error(exc, host=HOST)
     # The flag name FORGEJO_TOKEN (literal text, not a secret) is fine.
     assert "FORGEJO_TOKEN" in rendered

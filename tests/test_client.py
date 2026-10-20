@@ -1,9 +1,9 @@
 """M1 client tests: token precedence, pagination boundary, repo lookup fallback.
 
 PRD #61 -- Test Plan, "API client" bullet:
-  * token precedence (--token > env > tea config); tea-config path is dropped
-    in M1 per the PRD Open Question #2 default, so we only assert
-    arg > env > error.
+  * token precedence ($FORGEJO_TOKEN > 1Password token_ref > error); the
+    --token flag was removed (argv is visible via ps) and the tea-config
+    path is dropped per the PRD Open Question #2 default.
   * runner pagination boundary (page-size multiple and one-over): mock 35
     runners across 2 pages via Link: rel="next" and assert all 35 come back.
   * repo_id 404/403/timeout -> `repo#<id>` fallback without aborting.
@@ -32,27 +32,107 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 # ---------------------------------------------------------------------------
 
 
-def test_token_arg_beats_env(monkeypatch):
-    monkeypatch.setenv("FORGEJO_TOKEN", "from-env")
-    assert fq.resolve_token(arg_token="from-arg") == "from-arg"
+def _op(stdout="op-secret", stderr="", rc=0, calls=None):
+    """Fake subprocess.run for `op read`; records argv + kwargs."""
+    def run(argv, **kw):
+        if calls is not None:
+            calls.append((argv, kw))
+        return fq.subprocess.CompletedProcess(argv, rc, stdout, stderr)
+    return run
 
 
-def test_token_env_used_when_no_arg(monkeypatch):
+def _which(path="/opt/op"):
+    return lambda _name: path
+
+
+def test_token_env_used(monkeypatch):
     monkeypatch.setenv("FORGEJO_TOKEN", "from-env")
-    assert fq.resolve_token(arg_token=None) == "from-env"
+    assert fq.resolve_token() == "from-env"
+
+
+def test_token_env_beats_token_ref():
+    def boom(*a, **k):
+        raise AssertionError("op must not run when FORGEJO_TOKEN is set")
+    assert fq.resolve_token(
+        "op://V/I/f", env={"FORGEJO_TOKEN": "from-env"}, run=boom, which=boom,
+    ) == "from-env"
 
 
 def test_token_missing_raises_config_error():
-    # Explicit empty env -> no fallback in M1.
-    with pytest.raises(fq.ConfigError):
-        fq.resolve_token(arg_token=None, env={})
+    with pytest.raises(fq.ConfigError, match="token_ref"):
+        fq.resolve_token(None, env={})
 
 
-def test_token_empty_arg_falls_through_to_env(monkeypatch):
-    # An empty --token (user passed --token "" on the CLI) should not
-    # mask the env var. Truthy check, not "is not None".
-    monkeypatch.setenv("FORGEJO_TOKEN", "from-env")
-    assert fq.resolve_token(arg_token="") == "from-env"
+def test_token_empty_env_falls_through_to_token_ref():
+    # Truthy check: FORGEJO_TOKEN="" does not mask token_ref.
+    assert fq.resolve_token(
+        "op://V/I/f", env={"FORGEJO_TOKEN": ""}, run=_op(), which=_which(),
+    ) == "op-secret"
+
+
+def test_token_ref_runs_op_read_without_shell():
+    calls = []
+    tok = fq.resolve_token(
+        "op://Private/Forgejo/token", env={},
+        run=_op(stdout="s3cret\n", calls=calls), which=_which(),
+    )
+    assert tok == "s3cret"
+    argv, kw = calls[0]
+    assert argv == ["/opt/op", "read", "--no-newline", "op://Private/Forgejo/token"]
+    assert kw.get("shell", False) is False
+    assert kw["timeout"] == fq._OP_TIMEOUT_S
+
+
+@pytest.mark.parametrize("ref", [
+    "Private/Forgejo/token",          # missing scheme
+    "--account=evil op://V/I/f",      # option smuggling
+    "op://V/I/f\nop://X/Y/z",         # control char
+    42,                               # wrong TOML type
+    "",
+])
+def test_token_ref_rejects_non_op_references(ref):
+    def boom(*a, **k):
+        raise AssertionError("op must not run for an invalid reference")
+    with pytest.raises(fq.ConfigError, match="op://"):
+        fq.resolve_token(ref, env={}, run=boom, which=boom)
+
+
+def test_token_ref_op_missing_from_path():
+    with pytest.raises(fq.ConfigError, match="not found on PATH"):
+        fq.resolve_token("op://V/I/f", env={}, run=_op(), which=_which(None))
+
+
+def test_token_ref_op_failure_is_config_error_with_sanitized_detail():
+    with pytest.raises(fq.ConfigError) as exc:
+        fq.resolve_token(
+            "op://V/I/f", env={},
+            run=_op(stdout="", stderr="[ERROR] not signed in\x1b[2J", rc=1),
+            which=_which(),
+        )
+    msg = str(exc.value)
+    assert "exit 1" in msg and "not signed in" in msg
+    assert "\x1b" not in msg
+    assert exc.value.exit_code == fq.EXIT_USAGE
+
+
+def test_token_ref_empty_secret_rejected():
+    with pytest.raises(fq.ConfigError, match="empty"):
+        fq.resolve_token("op://V/I/f", env={}, run=_op(stdout="  \n"), which=_which())
+
+
+def test_token_ref_timeout_is_config_error():
+    def slow(argv, **kw):
+        raise fq.subprocess.TimeoutExpired(argv, kw["timeout"])
+    with pytest.raises(fq.ConfigError, match="timed out"):
+        fq.resolve_token("op://V/I/f", env={}, run=slow, which=_which())
+
+
+def test_token_ref_survives_config_load_but_literal_token_does_not(tmp_path):
+    cfg = tmp_path / "c.toml"
+    cfg.write_text('token = "literal"\ntoken_ref = "op://V/I/f"\n')
+    data = fq.load_file_config(str(cfg))
+    assert "token" not in data
+    assert data["token_ref"] == "op://V/I/f"
 
 
 def test_config_error_exit_code():
@@ -1208,3 +1288,42 @@ def test_fetch_ncps_status_interpolates_rate_window():
     rate_queries = [q for q in captured if "rate(" in q]
     assert rate_queries
     assert all(f"[{fq._NCPS_RATE_WINDOW}]" in q for q in rate_queries)
+
+
+# ---------------------------------------------------------------------------
+# Untrusted server strings: control / bidi characters neutralized at parse.
+# ---------------------------------------------------------------------------
+
+
+def test_safe_text_replaces_control_and_bidi_chars():
+    raw = "a\x1b]52;c;ZXZpbA==\x07b\x9b2Jc‮d\r\ne\tf"
+    assert fq._safe_text(raw) == "a?]52;c;ZXZpbA==?b?2Jc?d??e?f"
+    assert fq._safe_text("plain ünïcode 🚀") == "plain ünïcode 🚀"
+
+
+def test_normalize_job_sanitizes_server_strings():
+    job = fq._normalize_job({
+        "id": 1, "name": "x\x1b[2Jy", "status": "waiting",
+        "runs_on": ["a\x1bb"], "needs": ["n\x07"], "handle": "h\x00",
+    })
+    assert job.name == "x?[2Jy"
+    assert job.runs_on == ("a?b",)
+    assert job.needs == ("n?",)
+    assert job.handle == "h?"
+
+
+def test_normalize_runner_sanitizes_server_strings():
+    r = fq._normalize_runner({
+        "id": 1, "name": "r\x1b", "status": "idle",
+        "version": "v\x9b", "labels": ["l⁦"],
+    })
+    assert (r.name, r.version, r.labels) == ("r?", "v?", ("l?",))
+
+
+@respx.mock
+def test_resolve_repo_sanitizes_full_name():
+    respx.get("https://git.example.com/api/v1/repositories/7").mock(
+        return_value=httpx.Response(200, json={"full_name": "o/\x1b]8;;x\x07r"})
+    )
+    with fq.Client(_cfg()) as c:
+        assert c.resolve_repo(7) == "o/?]8;;x?r"

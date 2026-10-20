@@ -868,3 +868,62 @@ def test_rich_ncps_unavailable_golden_width_120_no_color(snapshot):
         width=120,
         color=False,
     ) == snapshot
+
+
+# ---------------------------------------------------------------------------
+# Running section (human renderers only).
+# ---------------------------------------------------------------------------
+
+
+def test_plain_running_section_lists_running_jobs():
+    out = fq.render_plain(_typical_snap())
+    assert "RUNNING (1):" in out
+    assert 'job_id=83886  task_id=85492  repo=owner-a/repo-a  name="Chainsaw E2E Tests"' in out
+
+
+def test_plain_running_section_empty_marker():
+    out = fq.render_plain(_snap())
+    assert "RUNNING (0):\n  (none)" in out
+
+
+def test_rich_running_table_lists_running_jobs():
+    text = _render_rich_to_text(_typical_snap(), width=200)
+    assert "Running" in text
+    assert "85492" in text
+    assert "Chainsaw E2E Tests" in text
+
+
+def test_rich_running_table_does_not_interpret_markup_in_server_strings():
+    """Job names are attacker-controlled (any repo writer); a name that
+    looks like Rich markup must render literally and never raise."""
+    jobs = [_job(1, status="running", task_id=2, name="[/bogus][link=https://x]evil")]
+    text = _render_rich_to_text(_snap(jobs=jobs), width=200)
+    assert "[/bogus][link=https://x]evil" in text
+
+
+# ---------------------------------------------------------------------------
+# Server-supplied strings are untrusted (any repo writer names jobs).
+# ---------------------------------------------------------------------------
+
+
+def test_rich_does_not_interpret_markup_in_any_server_string():
+    """Unbalanced closing tags used to raise MarkupError (crashing watch
+    mode); balanced ones restyled rows or injected links."""
+    evil = "[/x][link=https://evil]e[/link]"
+    runners = [_runner(1, name=evil, version=evil, labels=(evil,))]
+    jobs = [
+        _job(10, name=evil, runs_on=(evil,), needs=(evil,)),
+        _job(11, status="running", task_id=5, name=evil, runs_on=(evil,)),
+        _job(12, name="ci", runs_on=("nobody-has-this",)),  # -> warning row
+    ]
+    snap = _snap(runners=runners, jobs=jobs, repo_names={85: evil})
+    text = _render_rich_to_text(snap, width=400)
+    assert evil in text
+    assert "Warnings" in text
+
+
+def test_rich_rerun_attempt_still_styled_after_markup_removal():
+    snap = _snap(jobs=[_job(1, attempt=3)])
+    text = _render_rich_to_text(snap, width=200, color=True)
+    assert "3 (rerun)" in text
+    assert "\x1b[31m" in text  # red

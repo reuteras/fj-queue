@@ -163,12 +163,21 @@ def test_load_file_config_other_keys_survive_stripping(tmp_path):
 # ---------------------------------------------------------------------------
 
 
-def test_load_file_config_discovers_cwd_file(tmp_path, monkeypatch):
-    """Auto-discovery picks up ./fj-queue.toml in the current directory."""
+def test_load_file_config_ignores_cwd_file(tmp_path, monkeypatch):
+    """./fj-queue.toml is NOT auto-discovered: a file planted in a cloned
+    repo could set `host` and receive $FORGEJO_TOKEN."""
+    monkeypatch.chdir(tmp_path)
+    monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty-xdg"))
+    (tmp_path / "fj-queue.toml").write_text('host = "attacker.example.com"\n')
+    assert fq.load_file_config() == {}
+
+
+def test_load_file_config_cwd_file_via_explicit_config(tmp_path, monkeypatch):
+    """The cwd file still works when passed explicitly with --config."""
     monkeypatch.chdir(tmp_path)
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty-xdg"))
     (tmp_path / "fj-queue.toml").write_text('host = "cwd.example.com"\n')
-    result = fq.load_file_config()
+    result = fq.load_file_config(config_arg="fj-queue.toml")
     assert result["host"] == "cwd.example.com"
 
 
@@ -184,17 +193,17 @@ def test_load_file_config_discovers_xdg_file(tmp_path, monkeypatch):
     assert result["host"] == "xdg.example.com"
 
 
-def test_load_file_config_cwd_beats_xdg(tmp_path, monkeypatch):
-    """cwd fj-queue.toml takes priority over XDG config."""
+def test_load_file_config_xdg_wins_over_cwd_file(tmp_path, monkeypatch):
+    """A cwd fj-queue.toml never shadows the user's XDG config."""
     monkeypatch.chdir(tmp_path)
-    (tmp_path / "fj-queue.toml").write_text('host = "cwd-wins.example.com"\n')
+    (tmp_path / "fj-queue.toml").write_text('host = "cwd-ignored.example.com"\n')
     xdg = tmp_path / "xdg"
     cfg_dir = xdg / "fj-queue"
     cfg_dir.mkdir(parents=True)
-    (cfg_dir / "config.toml").write_text('host = "xdg-loses.example.com"\n')
+    (cfg_dir / "config.toml").write_text('host = "xdg-wins.example.com"\n')
     monkeypatch.setenv("XDG_CONFIG_HOME", str(xdg))
     result = fq.load_file_config()
-    assert result["host"] == "cwd-wins.example.com"
+    assert result["host"] == "xdg-wins.example.com"
 
 
 def test_load_file_config_explicit_beats_cwd(tmp_path, monkeypatch):
@@ -219,7 +228,7 @@ def test_missing_host_exits_2_json(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--token", "tok"],
+        ["--format", "json"],
         stdout=out, stderr=err, is_tty=False,
     )
     assert rc == fq.EXIT_USAGE
@@ -235,7 +244,7 @@ def test_missing_host_exits_2_plain(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "plain", "--token", "tok"],
+        ["--format", "plain"],
         stdout=out, stderr=err, is_tty=False,
     )
     assert rc == fq.EXIT_USAGE
@@ -260,7 +269,7 @@ def test_host_from_config_file_reaches_json_output(tmp_path, monkeypatch):
 
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--config", str(cfg), "--token", "tok",
+        ["--format", "json", "--config", str(cfg),
          "--no-metrics"],
         client=_FakeClient(), stdout=out, stderr=err, is_tty=False,
     )
@@ -286,7 +295,7 @@ def test_host_flag_beats_config_file(tmp_path, monkeypatch):
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
         ["--format", "json", "--config", str(cfg),
-         "--host", "flag.example.com", "--token", "tok", "--no-metrics"],
+         "--host", "flag.example.com", "--no-metrics"],
         client=_FakeClient(), stdout=out, stderr=err, is_tty=False,
     )
     assert rc == fq.EXIT_OK
@@ -338,7 +347,7 @@ def _metrics_main(argv, monkeypatch, tmp_path):
     monkeypatch.delenv("FORGEJO_HOST", raising=False)
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--host", "h.example.com", "--token", "tok"] + argv,
+        ["--format", "json", "--host", "h.example.com"] + argv,
         client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
     )
     return rc, json.loads(out.getvalue()) if out.getvalue().strip() else {}, err.getvalue()
@@ -397,7 +406,7 @@ def test_metrics_config_enabled_true(monkeypatch, tmp_path):
     )
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--config", str(cfg), "--token", "tok"],
+        ["--format", "json", "--config", str(cfg)],
         client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
     )
     assert rc == fq.EXIT_OK
@@ -418,7 +427,7 @@ def test_no_metrics_flag_beats_config_enabled(monkeypatch, tmp_path):
     )
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--config", str(cfg), "--token", "tok",
+        ["--format", "json", "--config", str(cfg),
          "--no-metrics"],
         client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
     )
@@ -439,7 +448,7 @@ def test_metrics_config_namespace_layering(monkeypatch, tmp_path):
     # but we can verify Config is built without errors.
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--host", "h.example.com", "--token", "tok",
+        ["--format", "json", "--host", "h.example.com",
          "--config", str(cfg)],
         client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
     )
@@ -469,7 +478,7 @@ def test_node_prefix_from_config(monkeypatch, tmp_path):
     )
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--token", "tok", "--config", str(cfg)],
+        ["--format", "json", "--config", str(cfg)],
         client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
     )
     assert rc == fq.EXIT_OK
@@ -491,7 +500,7 @@ def _ncps_main(argv, monkeypatch, tmp_path):
     monkeypatch.delenv("FORGEJO_HOST", raising=False)
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--host", "h.example.com", "--token", "tok"] + argv,
+        ["--format", "json", "--host", "h.example.com"] + argv,
         client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
     )
     return rc, json.loads(out.getvalue()) if out.getvalue().strip() else {}, err.getvalue()
@@ -562,7 +571,7 @@ def test_ncps_config_enabled_true(monkeypatch, tmp_path):
     )
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--config", str(cfg), "--token", "tok"],
+        ["--format", "json", "--config", str(cfg)],
         client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
     )
     assert rc == fq.EXIT_OK
@@ -581,7 +590,7 @@ def test_no_ncps_flag_beats_config_enabled(monkeypatch, tmp_path):
     cfg.write_text('host = "h.example.com"\n[ncps]\nenabled = true\n')
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--config", str(cfg), "--token", "tok", "--no-ncps"],
+        ["--format", "json", "--config", str(cfg), "--no-ncps"],
         client=_MetricsFakeClient(), stdout=out, stderr=err, is_tty=False,
     )
     assert rc == fq.EXIT_OK

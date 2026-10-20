@@ -46,14 +46,16 @@ fj-queue --host git.example.com --mode watch
 fj-queue --host git.example.com --format json | jq '.totals'
 ```
 
-Pass an **admin-scoped** Forgejo API token via `--token` or `$FORGEJO_TOKEN`.
-A non-admin token exits 3.
+Provide an **admin-scoped** Forgejo API token via `$FORGEJO_TOKEN`, or store
+it in 1Password and point the config file at it with
+`token_ref = "op://Vault/Item/field"` (read with the `op` CLI). A non-admin
+token exits 3.
 
 Prefer running from a checkout without installing (`uv run fj_queue.py`)? See
 [Installation](docs/installation.md).
 
-For persistent settings, create `fj-queue.toml` in the current directory
-(or `~/.config/fj-queue/config.toml`):
+For persistent settings, create `~/.config/fj-queue/config.toml` (or pass
+any file with `--config PATH`; `./fj-queue.toml` is not auto-loaded):
 
 ```toml
 host = "git.example.com"

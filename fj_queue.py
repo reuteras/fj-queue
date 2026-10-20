@@ -41,6 +41,9 @@ to stable internal names on the frozen dataclasses below.
 from __future__ import annotations
 
 import os
+import re
+import shutil
+import subprocess
 import tomllib
 from dataclasses import dataclass, field, replace
 from datetime import datetime, timezone
@@ -178,28 +181,104 @@ class Config:
 # ---------------------------------------------------------------------------
 # Token resolution.
 #
-# Precedence (PRD Authentication, with Open Question #2 default applied):
-#   1. --token arg
-#   2. $FORGEJO_TOKEN env
-#   (tea-config fallback intentionally dropped: would pull in pyyaml for one
-#   optional path. Re-add behind --token-from-tea if asked.)
+# Precedence:
+#   1. $FORGEJO_TOKEN env
+#   2. `token_ref = "op://Vault/Item/field"` in the config file, resolved
+#      with the 1Password CLI (`op read`). Only a *reference* is accepted:
+#      a literal `token` key is still dropped by load_file_config.
+#   There is deliberately no --token flag: argv is readable by every local
+#   user via ps(1) / /proc. (tea-config fallback intentionally dropped:
+#   would pull in pyyaml for one optional path.)
+#
+# Trust note: token_ref makes the config file able to run `op read` and
+# send the result to the config's `host`. That is only safe because the
+# config file is never auto-discovered from the cwd (see
+# _find_config_file); it must be user-owned or passed via --config.
 # ---------------------------------------------------------------------------
+
+OP_REF_PREFIX = "op://"
+# Generous: `op` may wait on a Touch ID / desktop-app unlock prompt.
+_OP_TIMEOUT_S = 30.0
+
+
+def _read_op_secret(
+    ref: object,
+    *,
+    run=None,
+    which=None,
+) -> str:
+    """Resolve a 1Password secret reference via `op read`.
+
+    No shell is involved (argv list), the reference must start with
+    `op://` (so it can never be parsed as an `op` option), and failures
+    raise ConfigError without ever echoing the secret. `run` / `which`
+    are injectable so tests never touch a real 1Password account.
+    """
+    if (
+        not isinstance(ref, str)
+        or not ref.startswith(OP_REF_PREFIX)
+        or _UNSAFE_TEXT_RE.search(ref)
+    ):
+        raise ConfigError(
+            f"token_ref must be a 1Password secret reference starting with "
+            f"{OP_REF_PREFIX!r} (e.g. \"op://Private/Forgejo/token\")"
+        )
+    op = (which or shutil.which)("op")
+    if not op:
+        raise ConfigError(
+            "token_ref is set but the 1Password CLI `op` was not found on PATH"
+        )
+    run = run or subprocess.run
+    try:
+        proc = run(
+            [op, "read", "--no-newline", ref],
+            capture_output=True,
+            text=True,
+            timeout=_OP_TIMEOUT_S,
+            check=False,
+        )
+    except subprocess.TimeoutExpired as e:
+        raise ConfigError(
+            f"`op read` timed out after {_OP_TIMEOUT_S:.0f}s "
+            "(is 1Password unlocked?)"
+        ) from e
+    except OSError as e:
+        raise ConfigError(f"could not run `op`: {e.strerror or e}") from e
+    if proc.returncode != 0:
+        # op's stderr describes the failure (not signed in, item not
+        # found); it never contains the secret. Sanitize + truncate.
+        detail = _safe_text((proc.stderr or "").strip())[:200] or "no output"
+        raise ConfigError(
+            f"`op read` failed (exit {proc.returncode}): {detail}"
+        )
+    secret = (proc.stdout or "").strip()
+    if not secret:
+        raise ConfigError("`op read` returned an empty secret for token_ref")
+    return secret
 
 
 def resolve_token(
-    arg_token: str | None = None,
+    config_ref: object = None,
     env: Mapping[str, str] | None = None,
+    *,
+    run=None,
+    which=None,
 ) -> str:
-    """Return the token to use, or raise ConfigError if neither source has one."""
+    """Return the token to use, or raise ConfigError if no source has one.
+
+    `config_ref` is the config file's `token_ref` value (or None). `op`
+    is only invoked when $FORGEJO_TOKEN is unset.
+    """
     if env is None:
         env = os.environ
-    if arg_token:
-        return arg_token
     from_env = env.get("FORGEJO_TOKEN", "")
     if from_env:
         return from_env
+    if config_ref is not None:
+        return _read_op_secret(config_ref, run=run, which=which)
     raise ConfigError(
-        "no token: pass --token or set FORGEJO_TOKEN in the environment"
+        "no token: set FORGEJO_TOKEN in the environment or add "
+        'token_ref = "op://Vault/Item/field" to the config file'
     )
 
 
@@ -270,20 +349,24 @@ def resolve_host(
         return config_value
     raise ConfigError(
         "no host: pass --host, set $FORGEJO_HOST, "
-        'or add host = "..." to ./fj-queue.toml or '
-        "~/.config/fj-queue/config.toml"
+        'or add host = "..." to ~/.config/fj-queue/config.toml '
+        "(or a file passed via --config)"
     )
 
 
 # ---------------------------------------------------------------------------
 # TOML config file loader.
 #
-# Discovery order (first hit wins, per the git-manager convention):
+# Discovery order (first hit wins):
 #   1. --config PATH (explicit; error if the path does not exist)
-#   2. ./fj-queue.toml (cwd)
-#   3. $XDG_CONFIG_HOME/fj-queue/config.toml
+#   2. $XDG_CONFIG_HOME/fj-queue/config.toml
 #      (falls back to ~/.config/fj-queue/config.toml when XDG_CONFIG_HOME
 #       is unset or empty)
+#
+# ./fj-queue.toml in the cwd is deliberately NOT auto-discovered: the
+# config sets `host`, and $FORGEJO_TOKEN is sent to that host, so a
+# fj-queue.toml planted in a cloned repo would exfiltrate the admin token
+# to whoever wrote it. Pass `--config ./fj-queue.toml` to opt in.
 #
 # A missing auto-discovered file is NOT an error.
 # The API token is NEVER read from the config file (security).
@@ -309,11 +392,7 @@ def _find_config_file(
         if not p.exists():
             raise ConfigError(f"config file not found: {config_arg}")
         return p
-    # cwd probe
-    cwd_config = Path.cwd() / "fj-queue.toml"
-    if cwd_config.exists():
-        return cwd_config
-    # XDG / home
+    # XDG / home (no cwd probe: see the discovery-order comment above)
     xdg_home = env.get("XDG_CONFIG_HOME", "").strip()
     if xdg_home:
         xdg_config = Path(xdg_home) / "fj-queue" / "config.toml"
@@ -336,7 +415,8 @@ def load_file_config(
       - a TOML parse error in any discovered file
 
     Security: the `token` key is silently dropped from any loaded config.
-    The API token must only come from --token / $FORGEJO_TOKEN.
+    The API token must only come from $FORGEJO_TOKEN or a 1Password
+    `token_ref` (resolved by resolve_token, never stored in the file).
     """
     path = _find_config_file(config_arg, env)
     if path is None:
@@ -418,22 +498,39 @@ class RawJob:
     handle: str
 
 
+# C0 controls (incl. ESC, CR, LF, TAB), DEL, C1 controls, and the Unicode
+# bidi embedding/override/isolate characters. Server-supplied strings
+# (job/runner/repo names, labels, pod names) are attacker-influenced: any
+# repo writer names jobs. Unfiltered, ESC sequences reach the terminal
+# (OSC 52 clipboard writes, OSC 8 links, cursor moves that redraw rows)
+# and bidi overrides can visually reorder text.
+_UNSAFE_TEXT_RE = re.compile(
+    "[\x00-\x1f\x7f-\x9f\u202a-\u202e\u2066-\u2069]"
+)
+
+
+def _safe_text(value: object) -> str:
+    """str() a server-supplied value, replacing terminal control and bidi
+    characters with `?` so they can never reach any output surface."""
+    return _UNSAFE_TEXT_RE.sub("?", str(value))
+
+
 def _coerce_str_list(raw: object) -> tuple[str, ...]:
     """Defensive: turn None / missing / list[Any] into tuple[str, ...]."""
     if raw is None:
         return ()
     if not isinstance(raw, (list, tuple)):
         raise SchemaDrift(f"expected list, got {type(raw).__name__}: {raw!r}")
-    return tuple(str(x) for x in raw)
+    return tuple(_safe_text(x) for x in raw)
 
 
 def _normalize_runner(raw: dict) -> Runner:
     try:
         return Runner(
             id=int(raw["id"]),
-            name=str(raw.get("name", "")),
-            status=str(raw.get("status", "offline")),
-            version=str(raw.get("version", "")),
+            name=_safe_text(raw.get("name", "")),
+            status=_safe_text(raw.get("status", "offline")),
+            version=_safe_text(raw.get("version", "")),
             labels=_coerce_str_list(raw.get("labels")),
             ephemeral=bool(raw.get("ephemeral", False)),
         )
@@ -445,15 +542,15 @@ def _normalize_job(raw: dict) -> RawJob:
     try:
         return RawJob(
             id=int(raw["id"]),
-            name=str(raw.get("name", "")),
-            status=str(raw.get("status", "")),
+            name=_safe_text(raw.get("name", "")),
+            status=_safe_text(raw.get("status", "")),
             repo_id=int(raw.get("repo_id", 0)),
             owner_id=int(raw.get("owner_id", 0)),
             runs_on=_coerce_str_list(raw.get("runs_on")),
             needs=_coerce_str_list(raw.get("needs")),
             task_id=int(raw.get("task_id", 0)),
             attempt=int(raw.get("attempt", 1)),
-            handle=str(raw.get("handle", "")),
+            handle=_safe_text(raw.get("handle", "")),
         )
     except (KeyError, TypeError, ValueError) as e:
         raise SchemaDrift(f"job parse failed: {e!r}; raw={raw!r}") from e
@@ -602,7 +699,7 @@ class Client:
             ) from e
 
         if r.status_code == 401:
-            raise AuthError("401 unauthorized: check --token / FORGEJO_TOKEN")
+            raise AuthError("401 unauthorized: check FORGEJO_TOKEN / token_ref")
         if r.status_code == 403:
             raise AuthError(
                 "403 forbidden: admin scope required for "
@@ -746,7 +843,7 @@ class Client:
             self._repo_cache[repo_id] = fallback
             return fallback
         slug = body.get("full_name") if isinstance(body, dict) else None
-        result = str(slug) if slug else fallback
+        result = _safe_text(slug) if slug else fallback
         self._repo_cache[repo_id] = result
         return result
 
@@ -1050,8 +1147,8 @@ def fetch_runner_pods(
             mem_limit = mem_limit_by_pod.get(pod)
             pods.append(
                 PodResource(
-                    pod=pod,
-                    node=node,
+                    pod=_safe_text(pod),
+                    node=_safe_text(node),
                     cpu_cores=float(cpu_by_pod.get(pod, 0.0)),
                     memory_bytes=int(mem_by_pod.get(pod, 0)),
                     cpu_limit_cores=(None if cpu_limit is None else float(cpu_limit)),
@@ -1310,6 +1407,27 @@ class Job:
 
 
 @dataclass(frozen=True)
+class RunningJob:
+    """A job currently executing on a runner. Feeds the human renderers'
+    "Running" section only; NOT part of the JSON contract (agents read
+    `totals.running` / `per_repo[].running`). Sorted by `job_id` ASC in
+    Snapshot.running.
+
+    The admin jobs payload carries no runner id, so which runner is
+    executing the job is not observable here; `task_id` is the handle
+    an operator can look up in the Forgejo UI.
+    """
+
+    job_id: int
+    job_name: str
+    repo: str  # owner/repo or repo#<id> fallback
+    repo_id: int
+    runs_on: tuple[str, ...]
+    task_id: int | None  # None if Forgejo still reports 0
+    attempt: int
+
+
+@dataclass(frozen=True)
 class RepoBreakdown:
     """Per-repo running/waiting/total counts. Sorted by `repo` slug in
     Snapshot.per_repo.
@@ -1396,6 +1514,11 @@ class Snapshot:
     # NCPS_DISABLED when ncps is explicitly off (ncps_enabled=False);
     # None when the fetch succeeded or there is no NCPS-specific reason.
     ncps_error: str | None = None
+    # Jobs currently executing (status == running), for the human
+    # renderers only; to_dict() deliberately does not emit it so the
+    # JSON contract stays unchanged. Scoped by --repo / --label like
+    # `queue`.
+    running: tuple[RunningJob, ...] = ()
 
 
 # ---------------------------------------------------------------------------
@@ -1598,6 +1721,22 @@ def aggregate(
         for slug in per_repo_slugs
     )
 
+    # Running jobs (id ASC, inherited from jobs_list) for the human
+    # renderers' "Running" section.
+    running_list = tuple(
+        RunningJob(
+            job_id=j.id,
+            job_name=j.name,
+            repo=repo_names.get(j.repo_id) or f"repo#{j.repo_id}",
+            repo_id=j.repo_id,
+            runs_on=j.runs_on,
+            task_id=j.task_id if j.task_id else None,
+            attempt=j.attempt,
+        )
+        for j in jobs_list
+        if j.status == _STATUS_RUNNING
+    )
+
     # Build the waiting-only queue with position + blocked_reason.
     waiting_jobs = [j for j in jobs_list if j.status == _STATUS_WAITING]
 
@@ -1699,6 +1838,7 @@ def aggregate(
         metrics_error=metrics_error,
         ncps=ncps,
         ncps_error=ncps_error,
+        running=running_list,
     )
 
 
@@ -2199,6 +2339,24 @@ def render_plain(snap: "Snapshot") -> str:
             )
     lines.append("")
 
+    # Running jobs.
+    lines.append(f"RUNNING ({len(snap.running)}):")
+    if not snap.running:
+        lines.append("  (none)")
+    else:
+        for rj in snap.running:
+            task = rj.task_id if rj.task_id is not None else "-"
+            lines.append(
+                f"  job_id={rj.job_id}  task_id={task}  "
+                f"repo={rj.repo}  "
+                f"name=\"{rj.job_name}\""
+            )
+            lines.append(
+                f"        attempt={rj.attempt}  "
+                f"runs_on={_format_str_list(rj.runs_on)}"
+            )
+    lines.append("")
+
     # Queue (waiting only).
     lines.append(f"QUEUE ({len(snap.queue)} waiting):")
     if not snap.queue:
@@ -2312,11 +2470,11 @@ def render_rich(snap: "Snapshot"):
             else:
                 status_style = "red"
             rt.add_row(
-                r.name,
+                Text(r.name),
                 Text(r.status, style=status_style),
                 online_cell,
-                r.version,
-                ", ".join(r.labels),
+                Text(r.version),
+                Text(", ".join(r.labels)),
                 "yes" if r.ephemeral else "no",
             )
     sections.append(rt)
@@ -2352,8 +2510,8 @@ def render_rich(snap: "Snapshot"):
                 # Rich uses the literal em dash for a None limit
                 # denominator (the addendum's spec; plain stays ASCII).
                 mt.add_row(
-                    p.pod,
-                    p.node,
+                    Text(p.pod),
+                    Text(p.node),
                     _fmt_cpu_cell(p.cpu_cores, p.cpu_limit_cores, dash="—"),
                     _fmt_mem_cell(p.memory_bytes, p.memory_limit_bytes, dash="—"),
                 )
@@ -2381,12 +2539,40 @@ def render_rich(snap: "Snapshot"):
     else:
         for pr in snap.per_repo:
             pt.add_row(
-                pr.repo,
+                Text(pr.repo),
                 str(pr.running),
                 str(pr.waiting),
                 str(pr.total),
             )
     sections.append(pt)
+
+    # --- Running table -----------------------------------------------
+    # Server-supplied strings go in as Text so Rich does not parse them
+    # as console markup.
+    rjt = Table(title="Running", show_lines=False, expand=False)
+    rjt.add_column("job_id", justify="right")
+    rjt.add_column("task_id", justify="right", style="dim")
+    rjt.add_column("repo", style="bold")
+    rjt.add_column("job_name", style="green")
+    rjt.add_column("attempt", justify="right")
+    rjt.add_column("runs_on")
+    if not snap.running:
+        rjt.add_row("", "", "(none)", "", "", "")
+    else:
+        for rj in snap.running:
+            attempt_cell = (
+                Text(f"{rj.attempt} (rerun)", style="red")
+                if rj.attempt > 1 else Text(str(rj.attempt))
+            )
+            rjt.add_row(
+                str(rj.job_id),
+                str(rj.task_id) if rj.task_id is not None else "-",
+                Text(rj.repo),
+                Text(rj.job_name),
+                attempt_cell,
+                Text(", ".join(rj.runs_on) if rj.runs_on else "-"),
+            )
+    sections.append(rjt)
 
     # --- Queue table -------------------------------------------------
     qt = Table(title="Queue (waiting, FIFO approx)", show_lines=False, expand=False)
@@ -2411,17 +2597,18 @@ def render_rich(snap: "Snapshot"):
                 Text(j.blocked_reason, style=reason_style)
                 if j.blocked_reason else Text("-", style="dim")
             )
-            attempt_str = str(j.attempt)
-            if j.attempt > 1:
-                attempt_str = f"[red]{attempt_str} (rerun)[/red]"
+            attempt_cell = (
+                Text(f"{j.attempt} (rerun)", style="red")
+                if j.attempt > 1 else Text(str(j.attempt))
+            )
             qt.add_row(
                 str(j.position),
                 str(j.job_id),
-                j.repo,
-                j.job_name,
-                attempt_str,
-                ", ".join(j.runs_on) if j.runs_on else "-",
-                ", ".join(j.needs) if j.needs else "-",
+                Text(j.repo),
+                Text(j.job_name),
+                attempt_cell,
+                Text(", ".join(j.runs_on) if j.runs_on else "-"),
+                Text(", ".join(j.needs) if j.needs else "-"),
                 reason_cell,
             )
     sections.append(qt)
@@ -2438,9 +2625,9 @@ def render_rich(snap: "Snapshot"):
             wt.add_row(
                 w.code,
                 str(w.job_id),
-                w.repo,
-                _format_str_list(w.runs_on),
-                w.message,
+                Text(w.repo),
+                Text(_format_str_list(w.runs_on)),
+                Text(w.message),
             )
         sections.append(wt)
 
@@ -2585,7 +2772,7 @@ def _watch_renderable(
 
 
 def _job_matches_filters(
-    job: "Job",
+    job: "Job | RunningJob",
     repo: str | None,
     labels: tuple[str, ...],
 ) -> bool:
@@ -2630,7 +2817,11 @@ def _scope_snapshot_queue(
         j for j in snap.queue
         if _job_matches_filters(j, filter_repo, filter_label)
     )
-    return replace(snap, queue=scoped_queue)
+    scoped_running = tuple(
+        j for j in snap.running
+        if _job_matches_filters(j, filter_repo, filter_label)
+    )
+    return replace(snap, queue=scoped_queue, running=scoped_running)
 
 
 def _do_one_fetch(
@@ -2936,7 +3127,7 @@ def run_watch(
 #   uv run fj_queue.py [--config PATH]
 #                      [--mode {watch,once}|--watch|--once]
 #                      [--format {rich,plain,json}]
-#                      [--interval N] [--host H] [--token T] [--timeout S]
+#                      [--interval N] [--host H] [--timeout S]
 #                      [--label L ...] [--repo owner/repo]
 #                      [--schema] [--version] [--help]
 #
@@ -2968,6 +3159,8 @@ def _build_parser():
             "order, and unschedulable-job warnings."
         ),
         epilog=(
+            "Token: $FORGEJO_TOKEN, else token_ref = \"op://...\" in the "
+            "config file (read via the 1Password CLI). Needs admin scope. "
             "Exit codes: 0 ok, 2 usage, 3 auth (401/403), 4 "
             "connection/timeout/5xx/429, 5 schema drift, 130 interrupted."
         ),
@@ -3016,20 +3209,15 @@ def _build_parser():
         default=None,
         metavar="PATH",
         help="path to TOML config file (overrides auto-discovery). "
-        "Auto-discovery order: ./fj-queue.toml, "
-        "$XDG_CONFIG_HOME/fj-queue/config.toml, "
-        "~/.config/fj-queue/config.toml.",
+        "Auto-discovery order: $XDG_CONFIG_HOME/fj-queue/config.toml, "
+        "~/.config/fj-queue/config.toml. ./fj-queue.toml is NOT "
+        "auto-loaded; pass it explicitly.",
     )
     parser.add_argument(
         "--host",
         default=None,
         help="Forgejo host (overrides $FORGEJO_HOST and config file). "
         "Required unless set via $FORGEJO_HOST or the config file.",
-    )
-    parser.add_argument(
-        "--token",
-        default=None,
-        help="API token (overrides $FORGEJO_TOKEN). Needs admin scope.",
     )
     parser.add_argument(
         "--timeout",
@@ -3239,7 +3427,7 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
 
     # Token resolution: a missing token is a usage error (exit 2).
     try:
-        token = resolve_token(args.token)
+        token = resolve_token(config_ref=file_config.get("token_ref"))
     except ConfigError as e:
         return _emit_error(
             # host may not be resolved yet; pass the raw flag value (or

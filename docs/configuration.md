@@ -14,7 +14,7 @@ For each setting, the highest-precedence source wins:
 | Setting | Flag | Env var | Config key | Default |
 |---|---|---|---|---|
 | Forgejo host | `--host HOST` | `$FORGEJO_HOST` | `host` | none (required) |
-| API token | `--token TOKEN` | `$FORGEJO_TOKEN` | (never in config) | none (required) |
+| API token | - | `$FORGEJO_TOKEN` | `token_ref` (1Password reference only) | none (required) |
 | Config file path | `--config PATH` | - | - | (auto-discovered) |
 | Output format | `--format {rich,plain,json}` | - | - | `rich` |
 | Run mode | `--mode {watch,once}` | - | - | `watch` at TTY, `once` when piped |
@@ -31,11 +31,13 @@ For each setting, the highest-precedence source wins:
 ## Config file format
 
 The config file uses [TOML](https://toml.io/) and is parsed with the stdlib
-`tomllib` (no extra dependency). The **API token is never read from or written
-to the config file**; use `--token` or `$FORGEJO_TOKEN`.
+`tomllib` (no extra dependency). The **API token itself is never read from or
+written to the config file** (a `token` key is ignored). Use `$FORGEJO_TOKEN`,
+or `token_ref` to reference a secret stored in 1Password.
 
 ```toml
 host = "git.example.com"
+token_ref = "op://Private/Forgejo admin token/credential"
 
 [metrics]
 enabled = true
@@ -55,12 +57,18 @@ fully annotated template.
 If `--config PATH` is not given, fj-queue looks for a config file in this
 order (first found wins):
 
-1. `./fj-queue.toml` (current directory)
-2. `$XDG_CONFIG_HOME/fj-queue/config.toml`
-3. `~/.config/fj-queue/config.toml` (fallback when `$XDG_CONFIG_HOME` is
+1. `$XDG_CONFIG_HOME/fj-queue/config.toml`
+2. `~/.config/fj-queue/config.toml` (fallback when `$XDG_CONFIG_HOME` is
    unset)
 
 If none is found, only CLI flags and environment variables apply.
+
+A `./fj-queue.toml` in the current directory is **not** loaded
+automatically. The config file sets `host`, and the admin token from
+`$FORGEJO_TOKEN` is sent to that host, so auto-loading a file from
+whatever directory you happen to be in (for example a freshly cloned
+repository) could hand your token to a third party. To use a local file,
+pass it explicitly: `--config ./fj-queue.toml`.
 
 ## Required settings
 
@@ -68,8 +76,23 @@ If none is found, only CLI flags and environment variables apply.
 is not provided by any source, fj-queue exits 2 with guidance pointing at the
 three resolution paths.
 
-**Token** (`--token` / `$FORGEJO_TOKEN`) is required for all API calls. It
-must have admin scope.
+**Token** is required for all API calls and must have admin scope. It is
+resolved in this order:
+
+1. `$FORGEJO_TOKEN`
+2. `token_ref` in the config file: a 1Password
+   [secret reference](https://developer.1password.com/docs/cli/secret-references/)
+   (`op://<vault>/<item>/<field>`), read with `op read --no-newline` (no
+   shell; 30 s timeout so a Touch ID prompt can be answered). The value must
+   start with `op://`. If `op` is missing, not signed in, or returns nothing,
+   fj-queue exits 2. `op` is not invoked at all when `$FORGEJO_TOKEN` is set.
+
+There is no `--token` flag: command-line arguments are visible to other
+local users via `ps`.
+
+Because `token_ref` lets the config file trigger `op read` and send the
+result to the configured `host`, only use config files you control. This is
+why `./fj-queue.toml` is never auto-loaded.
 
 ## Opt-in features: metrics and NCPS
 

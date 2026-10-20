@@ -101,7 +101,6 @@ uv run fj_queue.py --schema > fj-queue.v1.json
 | Flag | Value | Description |
 |---|---|---|
 | `--host HOST` | string | Forgejo host. Bare hostname is auto-prefixed with `https://`. Required (no built-in default). |
-| `--token TOKEN` | string | API token. Overrides `$FORGEJO_TOKEN`. Needs admin scope. |
 | `--config PATH` | path | Path to TOML config file (overrides auto-discovery). |
 | `--mode {watch,once}` | enum | Run mode. Default: `watch` at a TTY, `once` when piped. |
 | `--watch` | alias | Equivalent to `--mode watch`. |
