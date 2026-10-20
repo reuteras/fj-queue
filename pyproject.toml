@@ -3,10 +3,7 @@ name = "fj-queue"
 version = "0.2.0"
 description = "Forgejo Actions runner & CI queue dashboard"
 requires-python = ">=3.11"
-dependencies = [
-    "httpx==0.28.1",
-    "rich==15.0.0",
-]
+dependencies = ["httpx", "rich"]
 
 # PEP-735 dev dependency group. Pinned so the test suite reproduces
 # byte-for-byte across machines. `rich` and `httpx` are duplicated here
@@ -14,14 +11,7 @@ dependencies = [
 # import them directly and `uv run --group dev pytest tests/` resolves
 # the dev group as a standalone environment.
 [dependency-groups]
-dev = [
-    "httpx==0.28.1",
-    "jsonschema==4.26.0",
-    "pytest==9.1.1",
-    "respx==0.23.1",
-    "rich==15.0.0",
-    "syrupy==4.9.1",
-]
+dev = ["jsonschema", "pytest", "respx", "syrupy"]
 
 # Surface fj_queue.py as a top-level module so `pytest tests/` and
 # `python -c "import fj_queue"` both work from the scripts/fj-queue/
