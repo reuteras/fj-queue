@@ -94,7 +94,7 @@ def test_naive_datetime_rejected():
     """A naive (no-tzinfo) `now` would emit a non-RFC3339 string in M3.
     Fail loud at the boundary, not in a downstream snapshot diff.
     """
-    naive = datetime(2026, 5, 27, 14, 0, 0)  # noqa: DTZ001 (deliberately naive)
+    naive = datetime(2026, 5, 27, 14, 0, 0)  # deliberately naive
     with pytest.raises(ValueError, match="timezone-aware"):
         fq.aggregate(
             runners=(),

@@ -633,7 +633,7 @@ def test_schema_accepts_unknown_inner_object_keys(schema):
 
 def test_rfc3339_helper_rejects_naive_datetime():
     with pytest.raises(ValueError, match="timezone-aware"):
-        fq._rfc3339_utc_z(datetime(2026, 1, 1, 0, 0, 0))  # noqa: DTZ001 (deliberately naive)
+        fq._rfc3339_utc_z(datetime(2026, 1, 1, 0, 0, 0))  # deliberately naive
 
 
 def test_rfc3339_helper_normalizes_non_utc_offset_to_utc():
