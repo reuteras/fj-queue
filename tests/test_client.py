@@ -227,7 +227,7 @@ def test_config_repr_masks_token():
     assert "SECRETXYZ" not in repr(c)
     assert "SECRETXYZ" not in str(c)
     assert "***" in repr(c)
-    assert "git.example.com" in repr(c)  # non-secret fields still visible
+    assert "host='git.example.com'" in repr(c)  # non-secret fields still visible
 
 
 def test_config_repr_with_empty_token():
