@@ -122,9 +122,7 @@ def _big_fixture(n_jobs: int = 2000, n_repos: int = 50, n_runners: int = 30):
 def big_snapshot():
     """Module-scoped: aggregate once, reuse across the render tests."""
     runners, jobs, repo_names = _big_fixture()
-    return fq.aggregate(
-        runners=runners, jobs=jobs, repo_names=repo_names, now=T0, host=HOST
-    )
+    return fq.aggregate(runners=runners, jobs=jobs, repo_names=repo_names, now=T0, host=HOST)
 
 
 # ---------------------------------------------------------------------------
@@ -138,9 +136,7 @@ def test_aggregate_perf_2000_jobs_50_repos():
     """
     runners, jobs, repo_names = _big_fixture()
     start = time.perf_counter()
-    snap = fq.aggregate(
-        runners=runners, jobs=jobs, repo_names=repo_names, now=T0, host=HOST
-    )
+    snap = fq.aggregate(runners=runners, jobs=jobs, repo_names=repo_names, now=T0, host=HOST)
     elapsed = time.perf_counter() - start
     # Sanity: half the jobs are running (task_id != 0), half waiting.
     assert snap.totals.running == 1000
@@ -265,6 +261,5 @@ def test_resolve_repos_for_jobs_worst_case_all_distinct_repo_ids():
     assert len(out) == 2000
     assert client.calls == 2000
     assert elapsed < BUDGET_AGGREGATE_S, (
-        f"_resolve_repos_for_jobs (cold) took {elapsed:.3f}s, "
-        f"budget {BUDGET_AGGREGATE_S}s"
+        f"_resolve_repos_for_jobs (cold) took {elapsed:.3f}s, budget {BUDGET_AGGREGATE_S}s"
     )

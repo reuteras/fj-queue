@@ -15,14 +15,18 @@ file is the M1 floor.
 from __future__ import annotations
 
 import json
+import secrets
 from datetime import UTC
 from pathlib import Path
+from typing import Any
 
 import httpx
 import pytest
 import respx
 
 import fj_queue as fq
+
+TOKEN = secrets.token_hex()
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -86,7 +90,7 @@ def test_token_empty_env_falls_through_to_token_ref():
 
 
 def test_token_ref_runs_op_read_without_shell():
-    calls = []
+    calls: list[tuple[list[str], dict[str, Any]]] = []
     tok = fq.resolve_token(
         "op://Private/Forgejo/token",
         env={},
@@ -155,7 +159,7 @@ def test_token_ref_survives_config_load_but_literal_token_does_not(tmp_path):
     cfg.write_text('token = "literal"\ntoken_ref = "op://V/I/f"\n')
     data = fq.load_file_config(str(cfg))
     assert "token" not in data
-    assert data["token_ref"] == "op://V/I/f"
+    assert data["token_ref"] == "op://V/I/f"  # noqa: S105 (a 1Password reference, not a secret)
 
 
 def test_config_error_exit_code():
@@ -187,9 +191,7 @@ def test_metrics_url_arg_beats_env():
 
 def test_metrics_url_env_used_when_no_arg():
     assert (
-        fq.resolve_metrics_url(
-            arg_url=None, env={"FJ_QUEUE_METRICS_URL": "https://env.example"}
-        )
+        fq.resolve_metrics_url(arg_url=None, env={"FJ_QUEUE_METRICS_URL": "https://env.example"})
         == "https://env.example"
     )
 
@@ -203,9 +205,7 @@ def test_metrics_url_empty_arg_falls_through_to_env():
     # An empty --metrics-url "" must not mask the env var (truthy check,
     # not "is not None"), matching the resolve_token semantics.
     assert (
-        fq.resolve_metrics_url(
-            arg_url="", env={"FJ_QUEUE_METRICS_URL": "https://env.example"}
-        )
+        fq.resolve_metrics_url(arg_url="", env={"FJ_QUEUE_METRICS_URL": "https://env.example"})
         == "https://env.example"
     )
 
@@ -223,9 +223,9 @@ def test_config_repr_masks_token():
     M4 (Rich panels), and M5 (watch-mode error display) will all serialize
     Config into user-facing output.
     """
-    c = fq.Config(host="git.example.com", token="SECRETXYZ", timeout=5.0)
-    assert "SECRETXYZ" not in repr(c)
-    assert "SECRETXYZ" not in str(c)
+    c = fq.Config(host="git.example.com", token=TOKEN, timeout=5.0)
+    assert TOKEN not in repr(c)
+    assert TOKEN not in str(c)
     assert "***" in repr(c)
     assert "host='git.example.com'" in repr(c)  # non-secret fields still visible
 
@@ -263,7 +263,7 @@ def _runner_dict(rid: int, *, status: str = "idle") -> dict:
 
 
 def _cfg() -> fq.Config:
-    return fq.Config(host="git.example.com", token="testtoken", timeout=5.0)
+    return fq.Config(host="git.example.com", token=TOKEN, timeout=5.0)
 
 
 # ---------------------------------------------------------------------------
@@ -289,9 +289,9 @@ def test_fetch_runners_follows_link_header_across_two_pages():
             return httpx.Response(200, json=page2)
         return httpx.Response(200, json=page1, headers={"Link": next_link})
 
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(side_effect=handler)
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        side_effect=handler
+    )
 
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
@@ -309,14 +309,12 @@ def test_fetch_runners_refuses_cross_host_next_link():
     dispatch (httpx would send the Authorization header to that host
     verbatim). Audit finding M2. Raise SchemaDrift; never follow.
     """
-    evil_link = (
-        '<https://attacker.test/api/v1/admin/actions/runners?page=2>; rel="next"'
-    )
+    evil_link = '<https://attacker.test/api/v1/admin/actions/runners?page=2>; rel="next"'
     page1 = [_runner_dict(i) for i in range(1, 4)]
 
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(return_value=httpx.Response(200, json=page1, headers={"Link": evil_link}))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        return_value=httpx.Response(200, json=page1, headers={"Link": evil_link})
+    )
 
     with fq.Client(_cfg()) as c, pytest.raises(fq.SchemaDrift, match="cross-host"):
         c.fetch_runners()
@@ -327,14 +325,10 @@ def test_fetch_runners_refuses_http_downgrade_next_link():
     """Same trust boundary, scheme variant: an http:// next-link on an https
     base would also leak the bearer token. Refuse.
     """
-    downgrade_link = (
-        '<http://git.example.com/api/v1/admin/actions/runners?page=2>; rel="next"'
-    )
+    downgrade_link = '<http://git.example.com/api/v1/admin/actions/runners?page=2>; rel="next"'
     page1 = [_runner_dict(i) for i in range(1, 4)]
 
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
         return_value=httpx.Response(200, json=page1, headers={"Link": downgrade_link})
     )
 
@@ -392,19 +386,16 @@ def test_fetch_runners_dedupes_runaway_link_loop():
     """
     overlap = [_runner_dict(1), _runner_dict(2), _runner_dict(3)]
     page2 = [_runner_dict(3)]  # duplicate of last item from page1
-    next_link = (
-        "<https://git.example.com/api/v1/admin/actions/runners"
-        '?limit=50&page=2>; rel="next"'
-    )
+    next_link = '<https://git.example.com/api/v1/admin/actions/runners?limit=50&page=2>; rel="next"'
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.params.get("page") == "2":
             return httpx.Response(200, json=page2)
         return httpx.Response(200, json=overlap, headers={"Link": next_link})
 
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(side_effect=handler)
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        side_effect=handler
+    )
 
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
@@ -422,9 +413,9 @@ def test_fetch_runners_passes_page_1_explicitly():
         captured.append(str(request.url))
         return httpx.Response(200, json=[_runner_dict(1)])
 
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(side_effect=handler)
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        side_effect=handler
+    )
 
     with fq.Client(_cfg()) as c:
         c.fetch_runners()
@@ -436,9 +427,9 @@ def test_fetch_runners_passes_page_1_explicitly():
 def test_fetch_runners_single_page_no_link_header():
     """No Link header -> single fetch, no follow-up."""
     page = [_runner_dict(i) for i in range(1, 4)]  # 3 runners (live shape)
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(return_value=httpx.Response(200, json=page))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        return_value=httpx.Response(200, json=page)
+    )
 
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
@@ -522,9 +513,9 @@ def test_fetch_jobs_null_payload_aggregates_to_empty_snapshot_exit_zero():
     respx.get("https://git.example.com/api/v1/admin/actions/runners/jobs").mock(
         return_value=httpx.Response(200, text="null")
     )
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(return_value=httpx.Response(200, json=[]))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        return_value=httpx.Response(200, json=[])
+    )
 
     from datetime import datetime
 
@@ -532,9 +523,7 @@ def test_fetch_jobs_null_payload_aggregates_to_empty_snapshot_exit_zero():
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
         jobs = c.fetch_jobs()
-    snap = fq.aggregate(
-        runners=runners, jobs=jobs, repo_names={}, now=now, host="git.example.com"
-    )
+    snap = fq.aggregate(runners=runners, jobs=jobs, repo_names={}, now=now, host="git.example.com")
     assert snap.queue == ()
     assert snap.totals.running == 0
     assert snap.totals.waiting == 0
@@ -620,9 +609,7 @@ def test_resolve_repo_timeout_returns_fallback_label():
 @respx.mock
 def test_resolve_repo_success_returns_full_name_and_caches():
     route = respx.get("https://git.example.com/api/v1/repositories/589").mock(
-        return_value=httpx.Response(
-            200, json={"id": 589, "full_name": "owner-a/repo-a"}
-        )
+        return_value=httpx.Response(200, json={"id": 589, "full_name": "owner-a/repo-a"})
     )
     with fq.Client(_cfg()) as c:
         first = c.resolve_repo(589)
@@ -639,45 +626,45 @@ def test_resolve_repo_success_returns_full_name_and_caches():
 
 @respx.mock
 def test_runners_401_raises_auth_error():
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(return_value=httpx.Response(401, json={"message": "nope"}))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        return_value=httpx.Response(401, json={"message": "nope"})
+    )
     with fq.Client(_cfg()) as c, pytest.raises(fq.AuthError):
         c.fetch_runners()
 
 
 @respx.mock
 def test_runners_403_raises_auth_error():
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(return_value=httpx.Response(403, json={"message": "needs admin"}))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        return_value=httpx.Response(403, json={"message": "needs admin"})
+    )
     with fq.Client(_cfg()) as c, pytest.raises(fq.AuthError):
         c.fetch_runners()
 
 
 @respx.mock
 def test_runners_500_raises_connection_error():
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(return_value=httpx.Response(503, text="upstream"))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        return_value=httpx.Response(503, text="upstream")
+    )
     with fq.Client(_cfg()) as c, pytest.raises(fq.ConnectionError):
         c.fetch_runners()
 
 
 @respx.mock
 def test_runners_429_raises_connection_error():
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(return_value=httpx.Response(429, text="slow down"))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        return_value=httpx.Response(429, text="slow down")
+    )
     with fq.Client(_cfg()) as c, pytest.raises(fq.ConnectionError):
         c.fetch_runners()
 
 
 @respx.mock
 def test_runners_timeout_raises_connection_error():
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(side_effect=httpx.TimeoutException("slow"))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        side_effect=httpx.TimeoutException("slow")
+    )
     with fq.Client(_cfg()) as c, pytest.raises(fq.ConnectionError):
         c.fetch_runners()
 
@@ -690,9 +677,9 @@ def test_runners_connection_refused_raises_connection_error():
     `_get` must map it to our typed ConnectionError so M5 watch loop
     treats it as transient and M6 CLI exits 4.
     """
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(side_effect=httpx.ConnectError("Connection refused"))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        side_effect=httpx.ConnectError("Connection refused")
+    )
     with fq.Client(_cfg()) as c, pytest.raises(fq.ConnectionError):
         c.fetch_runners()
 
@@ -711,19 +698,16 @@ def test_fetch_runners_pagination_exact_page_size_multiple():
     cleanly without raising.
     """
     page1 = [_runner_dict(i) for i in range(1, 51)]  # 50 runners
-    next_link = (
-        "<https://git.example.com/api/v1/admin/actions/runners"
-        '?limit=50&page=2>; rel="next"'
-    )
+    next_link = '<https://git.example.com/api/v1/admin/actions/runners?limit=50&page=2>; rel="next"'
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.params.get("page") == "2":
             return httpx.Response(200, json=[])
         return httpx.Response(200, json=page1, headers={"Link": next_link})
 
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(side_effect=handler)
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        side_effect=handler
+    )
 
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
@@ -739,19 +723,16 @@ def test_fetch_runners_pagination_one_over_page_size():
     """
     page1 = [_runner_dict(i) for i in range(1, 51)]  # 50 runners
     page2 = [_runner_dict(51)]  # 1 runner
-    next_link = (
-        "<https://git.example.com/api/v1/admin/actions/runners"
-        '?limit=50&page=2>; rel="next"'
-    )
+    next_link = '<https://git.example.com/api/v1/admin/actions/runners?limit=50&page=2>; rel="next"'
 
     def handler(request: httpx.Request) -> httpx.Response:
         if request.url.params.get("page") == "2":
             return httpx.Response(200, json=page2)
         return httpx.Response(200, json=page1, headers={"Link": next_link})
 
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(side_effect=handler)
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        side_effect=handler
+    )
 
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
@@ -777,9 +758,9 @@ def test_fetch_runners_tolerates_missing_optional_fields():
         {"id": 101, "labels": None, "status": None},  # explicit nulls
         {"id": 102, "name": "anon", "labels": ["grunt"]},
     ]
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(return_value=httpx.Response(200, json=body))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        return_value=httpx.Response(200, json=body)
+    )
 
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
@@ -807,9 +788,9 @@ def test_fetch_runners_unexpected_status_string_does_not_crash():
             "ephemeral": False,
         }
     ]
-    respx.get(
-        url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*"
-    ).mock(return_value=httpx.Response(200, json=body))
+    respx.get(url__regex=r"https://git\.example\.com/api/v1/admin/actions/runners.*").mock(
+        return_value=httpx.Response(200, json=body)
+    )
 
     with fq.Client(_cfg()) as c:
         runners = c.fetch_runners()
@@ -962,9 +943,7 @@ def test_fetch_runner_pods_pod_missing_from_memory_limit_query_is_none():
     """
     fixture = _prom_fixture()
     # Drop the last pod (pod3) from the memory-limit result.
-    fixture["memory_limit"]["data"]["result"] = fixture["memory_limit"]["data"][
-        "result"
-    ][:2]
+    fixture["memory_limit"]["data"]["result"] = fixture["memory_limit"]["data"]["result"][:2]
     respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
         side_effect=_prom_handler(fixture)
     )
@@ -1105,9 +1084,7 @@ def test_fetch_runner_pods_malformed_body_is_graceful():
 @respx.mock
 def test_fetch_runner_pods_status_not_success_is_graceful():
     respx.get(url__regex=r"https://prometheus\.example\.com/api/v1/query.*").mock(
-        return_value=httpx.Response(
-            200, json={"status": "error", "errorType": "bad_data"}
-        )
+        return_value=httpx.Response(200, json={"status": "error", "errorType": "bad_data"})
     )
     pods, error = fq.fetch_runner_pods(METRICS_URL)
     assert pods == ()

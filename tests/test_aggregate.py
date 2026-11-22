@@ -191,18 +191,14 @@ def test_scope_label_subset_semantics():
     assert [j.position for j in scoped.queue] == [1, 3, 4]
 
     # `grunt` + `docker` keeps only job 30.
-    scoped2 = fq._scope_snapshot_queue(
-        snap, filter_repo=None, filter_label=("grunt", "docker")
-    )
+    scoped2 = fq._scope_snapshot_queue(snap, filter_repo=None, filter_label=("grunt", "docker"))
     assert tuple(j.job_id for j in scoped2.queue) == (30,)
     assert scoped2.queue[0].position == 3
 
 
 def test_scope_combined_repo_and_label():
     snap = _make_multi_repo_snapshot()
-    scoped = fq._scope_snapshot_queue(
-        snap, filter_repo="alpha/repo", filter_label=("docker",)
-    )
+    scoped = fq._scope_snapshot_queue(snap, filter_repo="alpha/repo", filter_label=("docker",))
     # Only job 30 is in alpha/repo AND has docker in runs_on.
     assert tuple(j.job_id for j in scoped.queue) == (30,)
     assert scoped.queue[0].position == 3
@@ -661,9 +657,7 @@ def test_wedged_sentinel_suppressed_by_waiting_non_sentinel_sibling():
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [
         _sentinel_job(10, repo_id=42),
-        _job(
-            11, status="waiting", repo_id=42, runs_on=("grunt",), needs=(), name="build"
-        ),
+        _job(11, status="waiting", repo_id=42, runs_on=("grunt",), needs=(), name="build"),
     ]
     snap = _agg(runners=runners, jobs=jobs, repo_names={42: "owner/app"})
     assert _wedged_warnings(snap) == []

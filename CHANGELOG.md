@@ -34,6 +34,11 @@ This project uses [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
   local user via `ps`. Use `$FORGEJO_TOKEN` or `token_ref`. Passing
   `--token` now exits 2 (unrecognized argument).
 
+- **PEP 723 script header and the `./fj-queue` symlink.** fj-queue is a
+  normal uv project: run it with `uv run fj-queue` or `uv run fj_queue.py`
+  from a checkout, or with `uvx` from GitHub. Dependency versions come from
+  `uv.lock` only, which Dependabot keeps updated.
+
 ### Security
 
 - **Breaking: `./fj-queue.toml` is no longer auto-discovered.** The config
