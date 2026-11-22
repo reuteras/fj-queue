@@ -3,28 +3,62 @@ name = "fj-queue"
 version = "0.2.0"
 description = "Forgejo Actions runner & CI queue dashboard"
 requires-python = ">=3.11"
-dependencies = ["httpx", "rich"]
+dependencies = ["httpx>=0.28.1", "rich>=15.0.0"]
 
 # `uvx --from git+https://github.com/reuteras/fj-queue fj-queue`
 [project.scripts]
 fj-queue = "fj_queue:cli"
 
-# PEP-735 dev dependency group. Pinned so the test suite reproduces
-# byte-for-byte across machines. `rich` and `httpx` are duplicated here
-# (they are already in [project].dependencies) because some test files
-# import them directly and `uv run --group dev pytest tests/` resolves
-# the dev group as a standalone environment.
+# PEP 735 dev group. Lower bounds only; uv.lock holds the exact versions.
+# Keep ruff in uv.lock in step with any ruff-pre-commit rev.
 [dependency-groups]
-dev = ["jsonschema", "mypy", "pytest", "respx", "ruff", "syrupy"]
+dev = [
+    "jsonschema>=4.26.0",
+    "mypy>=2.4.1",
+    "pytest>=9.2.0",
+    "respx>=0.23.1",
+    "ruff>=0.17.5",
+    "syrupy>=7.0.0",
+]
 
 # Surface fj_queue.py as a top-level module so `pytest tests/` and
-# `python -c "import fj_queue"` both work from the scripts/fj-queue/
-# directory without extra PYTHONPATH plumbing.
+# `python -c "import fj_queue"` both work from the checkout without extra
+# PYTHONPATH plumbing.
 [tool.setuptools]
 py-modules = ["fj_queue"]
 # Ship the JSON Schema with installed copies (uvx / uv tool install) so
 # `--schema` works outside a checkout; load_schema() looks here second.
 data-files = { "share/fj-queue/schema" = ["schema/fj-queue.v1.json"] }
+
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+
+[tool.ruff.lint]
+select = [
+    "E", "W",  # pycodestyle
+    "F",       # pyflakes
+    "I",       # isort
+    "B",       # bugbear
+    "UP",      # pyupgrade
+    "S",       # bandit
+    "SIM",     # simplify
+    "RUF",     # ruff-specific
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+
+[tool.mypy]
+files = ["fj_queue.py", "tests"]
+python_version = "3.11"
+check_untyped_defs = true
+warn_unused_ignores = true
+warn_redundant_casts = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
 
 # jsonschema ships no type stubs; it is only used by the contract tests.
 [[tool.mypy.overrides]]

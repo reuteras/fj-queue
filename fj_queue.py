@@ -1,13 +1,3 @@
-#!/usr/bin/env -S uv run --script
-
-# /// script
-# requires-python = ">=3.11"
-# dependencies = [
-#     "httpx==0.28.1",
-#     "rich==15.0.0",
-# ]
-# ///
-
 """fj-queue: Forgejo Actions runner & CI queue dashboard.
 
 Read-only TUI/JSON view of the Forgejo admin Actions API. PRD #61.
@@ -41,6 +31,7 @@ to stable internal names on the frozen dataclasses below.
 from __future__ import annotations
 
 import contextlib
+import json as _json
 import math
 import os
 import re
@@ -52,7 +43,7 @@ from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass, replace
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Literal, Self, TypeVar
+from typing import Literal, Protocol, Self, TypeVar
 from urllib.parse import urlsplit
 
 import httpx
@@ -214,20 +205,14 @@ def _read_op_secret(
     raise ConfigError without ever echoing the secret. `run` / `which`
     are injectable so tests never touch a real 1Password account.
     """
-    if (
-        not isinstance(ref, str)
-        or not ref.startswith(OP_REF_PREFIX)
-        or _UNSAFE_TEXT_RE.search(ref)
-    ):
+    if not isinstance(ref, str) or not ref.startswith(OP_REF_PREFIX) or _UNSAFE_TEXT_RE.search(ref):
         raise ConfigError(
             f"token_ref must be a 1Password secret reference starting with "
             f'{OP_REF_PREFIX!r} (e.g. "op://Private/Forgejo/token")'
         )
     op = (which or shutil.which)("op")
     if not op:
-        raise ConfigError(
-            "token_ref is set but the 1Password CLI `op` was not found on PATH"
-        )
+        raise ConfigError("token_ref is set but the 1Password CLI `op` was not found on PATH")
     run = run or subprocess.run
     try:
         proc = run(
@@ -638,6 +623,22 @@ _RUNNER_PAGE_CAP = 200
 _RUNNER_PAGE_SIZE = 50
 
 
+class RepoResolver(Protocol):
+    """What _resolve_repos_for_jobs needs from a client."""
+
+    def resolve_repo(self, repo_id: int, /) -> str: ...
+
+
+class QueueSource(RepoResolver, Protocol):
+    """What the fetch and watch paths need from a client (Client, or a test fake)."""
+
+    def fetch_runners(self) -> list[Runner]: ...
+
+    def fetch_jobs(self) -> list[RawJob]: ...
+
+    def close(self) -> None: ...
+
+
 class Client:
     """Thin httpx wrapper around the Forgejo admin Actions API.
 
@@ -692,8 +693,7 @@ class Client:
             raise AuthError("401 unauthorized: check FORGEJO_TOKEN / token_ref")
         if r.status_code == 403:
             raise AuthError(
-                "403 forbidden: admin scope required for "
-                "/api/v1/admin/actions/* endpoints"
+                "403 forbidden: admin scope required for /api/v1/admin/actions/* endpoints"
             )
         if r.status_code == 429:
             raise ConnectionError(f"429 rate-limited by {self.config.host}")
@@ -729,18 +729,14 @@ class Client:
         """
         runners: list[Runner] = []
         seen_ids: set[int] = set()
-        next_path: str | None = (
-            f"/api/v1/admin/actions/runners?limit={_RUNNER_PAGE_SIZE}&page=1"
-        )
+        next_path: str | None = f"/api/v1/admin/actions/runners?limit={_RUNNER_PAGE_SIZE}&page=1"
         pages = 0
         while next_path:
             r = self._get(next_path)
             try:
                 body = r.json()
             except ValueError as e:
-                raise SchemaDrift(
-                    f"non-JSON runners response from {next_path}: {e}"
-                ) from e
+                raise SchemaDrift(f"non-JSON runners response from {next_path}: {e}") from e
             # Forgejo returns a bare list (verified live). Tolerate an
             # enveloped {"runners": [...]} shape too in case a future
             # version adds one.
@@ -750,14 +746,10 @@ class Client:
                 else (body.get("runners") if isinstance(body, dict) else None)
             )
             if items is None:
-                raise SchemaDrift(
-                    f"unexpected runners payload shape: {type(body).__name__}"
-                )
+                raise SchemaDrift(f"unexpected runners payload shape: {type(body).__name__}")
             for raw in items:
                 if not isinstance(raw, dict):
-                    raise SchemaDrift(
-                        f"runner item not an object: {type(raw).__name__}"
-                    )
+                    raise SchemaDrift(f"runner item not an object: {type(raw).__name__}")
                 runner = _normalize_runner(raw)
                 if runner.id in seen_ids:
                     continue
@@ -765,14 +757,10 @@ class Client:
                 runners.append(runner)
             raw_next = _parse_next_link(r.headers.get("link"))
             # Trust-boundary check: refuse to send the admin token off-host.
-            next_path = (
-                _enforce_same_host(raw_next, self.config.host) if raw_next else None
-            )
+            next_path = _enforce_same_host(raw_next, self.config.host) if raw_next else None
             pages += 1
             if pages > _RUNNER_PAGE_CAP:
-                raise ConnectionError(
-                    f"runner pagination exceeded {_RUNNER_PAGE_CAP} pages"
-                )
+                raise ConnectionError(f"runner pagination exceeded {_RUNNER_PAGE_CAP} pages")
         return runners
 
     def fetch_jobs(self) -> list[RawJob]:
@@ -958,20 +946,17 @@ _PROM_CPU_QUERY = (
     '{{namespace="{ns}", container!=""}}[' + _PROM_RATE_WINDOW + "]))"
 )
 _PROM_MEM_QUERY = (
-    "sum by (pod) (container_memory_working_set_bytes"
-    '{{namespace="{ns}", container!=""}})'
+    'sum by (pod) (container_memory_working_set_bytes{{namespace="{ns}", container!=""}})'
 )
 _PROM_INFO_QUERY = 'kube_pod_info{{namespace="{ns}"}}'
 # Configured pod resource limits (summed across containers). Memory limits
 # ARE set (~17.4 GiB/pod); CPU limits are NOT (the cpu query returns no
 # series), so the cpu-limit map is typically empty -> cpu_limit_cores=None.
 _PROM_MEM_LIMIT_QUERY = (
-    "sum by (pod) (kube_pod_container_resource_limits"
-    '{{namespace="{ns}", resource="memory"}})'
+    'sum by (pod) (kube_pod_container_resource_limits{{namespace="{ns}", resource="memory"}})'
 )
 _PROM_CPU_LIMIT_QUERY = (
-    "sum by (pod) (kube_pod_container_resource_limits"
-    '{{namespace="{ns}", resource="cpu"}})'
+    'sum by (pod) (kube_pod_container_resource_limits{{namespace="{ns}", resource="cpu"}})'
 )
 
 
@@ -1147,7 +1132,7 @@ def fetch_runner_pods(
         return (), f"timeout querying prometheus at {base or metrics_url!r}"
     except httpx.HTTPError as e:
         return (), f"connection error querying prometheus: {e}"
-    except Exception as e:  # noqa: BLE001 (last-resort: never crash the dashboard)
+    except Exception as e:
         return (), f"prometheus query failed: {e}"
     finally:
         if owns and client is not None:
@@ -1188,13 +1173,11 @@ _NCPS_RATE_WINDOW = "2m"
 # rate window is interpolated from _NCPS_RATE_WINDOW (single source of
 # truth, same pattern as _PROM_CPU_QUERY).
 _NCPS_REQUESTS_QUERY = (
-    "sum(rate(request_duration_millis_milliseconds_count"
-    '{job="ncps"}[' + _NCPS_RATE_WINDOW + "]))"
+    'sum(rate(request_duration_millis_milliseconds_count{job="ncps"}[' + _NCPS_RATE_WINDOW + "]))"
 )
 _NCPS_INFLIGHT_QUERY = 'sum(requests_inflight{job="ncps"})'
 _NCPS_UPSTREAM_QUERY = (
-    "sum(rate(http_client_request_duration_seconds_count"
-    '{job="ncps"}[' + _NCPS_RATE_WINDOW + "]))"
+    'sum(rate(http_client_request_duration_seconds_count{job="ncps"}[' + _NCPS_RATE_WINDOW + "]))"
 )
 # Throughput = the NCPS pod's network egress (cAdvisor), NOT
 # response_size_bytes_sum: NCPS doesn't record sizes for streamed nar
@@ -1202,8 +1185,7 @@ _NCPS_UPSTREAM_QUERY = (
 # nars (a cache miss's upstream download lands on RECEIVE, not transmit).
 # This metric is keyed by namespace="ncps" (it has NO job="ncps" label).
 _NCPS_BYTES_QUERY = (
-    "sum(rate(container_network_transmit_bytes_total"
-    '{namespace="ncps"}[' + _NCPS_RATE_WINDOW + "]))"
+    'sum(rate(container_network_transmit_bytes_total{namespace="ncps"}[' + _NCPS_RATE_WINDOW + "]))"
 )
 
 
@@ -1238,7 +1220,7 @@ def fetch_ncps_status(
             upstream_per_sec=upstream,
             bytes_per_sec=bytes_ps,
         )
-    except Exception:  # noqa: BLE001 (never crash the dashboard on metrics)
+    except Exception:
         return None
     finally:
         if owns and client is not None:
@@ -1522,10 +1504,7 @@ def _job_runs_on_satisfied_by_any(
     naturally (no special-case needed).
     """
     runs_on_set = frozenset(runs_on)
-    for labels in online_runner_label_sets:
-        if runs_on_set.issubset(labels):
-            return True
-    return False
+    return any(runs_on_set.issubset(labels) for labels in online_runner_label_sets)
 
 
 def _is_sentinel_shaped(job: RawJob) -> bool:
@@ -1637,13 +1616,9 @@ def aggregate(
         # Defensive: a naive datetime would emit a non-RFC3339 string in
         # M3's JSON envelope. Surface the mistake at the boundary, not
         # in a downstream test failure.
-        raise ValueError(
-            "aggregate(now=...) MUST be timezone-aware (UTC); got a naive datetime"
-        )
+        raise ValueError("aggregate(now=...) MUST be timezone-aware (UTC); got a naive datetime")
 
-    runners_tuple: tuple[Runner, ...] = tuple(
-        sorted(runners, key=lambda r: (r.name, r.id))
-    )
+    runners_tuple: tuple[Runner, ...] = tuple(sorted(runners, key=lambda r: (r.name, r.id)))
 
     # Precompute online runner label sets once. Used by every waiting
     # job's blocked_reason derivation below.
@@ -1653,9 +1628,7 @@ def aggregate(
 
     # schedulable_labels (PRD JSON contract): union of ONLINE runners'
     # labels, sorted alphabetically.
-    schedulable_labels = tuple(
-        sorted({lbl for labels in online_label_sets for lbl in labels})
-    )
+    schedulable_labels = tuple(sorted({lbl for labels in online_label_sets for lbl in labels}))
 
     # Materialize jobs in a stable order (id ASC). Forgejo serves
     # id DESC; re-sorting is the source-verified FIFO approximation.
@@ -1770,9 +1743,7 @@ def aggregate(
                     job_id=j.id,
                     repo=slug,
                     runs_on=j.runs_on,
-                    message=(
-                        f"No online runner can satisfy runs_on: {list(j.runs_on)}"
-                    ),
+                    message=(f"No online runner can satisfy runs_on: {list(j.runs_on)}"),
                 )
             )
         if j.id in sentinel_shaped_ids and j.repo_id not in active_repo_ids:
@@ -1858,15 +1829,12 @@ def aggregate(
 # Exit code is exc.exit_code (PRD §error contract typed codes: 2/3/4/5).
 # ===========================================================================
 
-import json as _json
 
 # Default JSON-Schema file location (sibling of this module).
 _SCHEMA_PATH = Path(__file__).resolve().parent / "schema" / "fj-queue.v1.json"
 # Where an installed wheel (uvx / uv tool install) puts the schema; see
 # [tool.setuptools] data-files in pyproject.toml.
-_INSTALLED_SCHEMA_PATH = (
-    Path(sys.prefix) / "share" / "fj-queue" / "schema" / "fj-queue.v1.json"
-)
+_INSTALLED_SCHEMA_PATH = Path(sys.prefix) / "share" / "fj-queue" / "schema" / "fj-queue.v1.json"
 
 
 def _rfc3339_utc_z(dt: datetime) -> str:
@@ -1977,10 +1945,7 @@ def to_dict(snap: Snapshot) -> dict:
     # filter_label: empty tuple -> null on the wire; non-empty -> list.
     # Matches PRD example which shows `"label": null` when not scoped.
     filter_label_wire: list[str] | None
-    if snap.filter_label:
-        filter_label_wire = list(snap.filter_label)
-    else:
-        filter_label_wire = None
+    filter_label_wire = list(snap.filter_label) if snap.filter_label else None
 
     return {
         "schema_version": snap.schema_version,
@@ -2081,10 +2046,7 @@ def render_json_error(
     `_scrub_token` pass applied symmetrically on the stderr and Rich
     error-panel paths.
     """
-    if isinstance(exc, FjQueueError):
-        code = exc.error_code
-    else:
-        code = "internal"
+    code = exc.error_code if isinstance(exc, FjQueueError) else "internal"
     message = _scrub_token(str(exc) or exc.__class__.__name__, scrub_token)
     return _json.dumps(
         {
@@ -2292,9 +2254,7 @@ def render_plain(snap: Snapshot) -> str:
                 # Plain stays ASCII-only: a None limit renders as `-`.
                 cpu_cell = _fmt_cpu_cell(p.cpu_cores, p.cpu_limit_cores, dash="-")
                 mem_cell = _fmt_mem_cell(p.memory_bytes, p.memory_limit_bytes, dash="-")
-                lines.append(
-                    f"  {p.pod:<40} node={p.node:<14} cpu={cpu_cell}  mem={mem_cell}"
-                )
+                lines.append(f"  {p.pod:<40} node={p.node:<14} cpu={cpu_cell}  mem={mem_cell}")
     lines.append("")
 
     # NCPS cache status (one line). Same metrics_error path as above.
@@ -2309,9 +2269,7 @@ def render_plain(snap: Snapshot) -> str:
     else:
         for pr in snap.per_repo:
             lines.append(
-                f"  {pr.repo:<32}  "
-                f"running={pr.running}  waiting={pr.waiting}  "
-                f"total={pr.total}"
+                f"  {pr.repo:<32}  running={pr.running}  waiting={pr.waiting}  total={pr.total}"
             )
     lines.append("")
 
@@ -2323,13 +2281,9 @@ def render_plain(snap: Snapshot) -> str:
         for rj in snap.running:
             task = rj.task_id if rj.task_id is not None else "-"
             lines.append(
-                f"  job_id={rj.job_id}  task_id={task}  "
-                f"repo={rj.repo}  "
-                f'name="{rj.job_name}"'
+                f'  job_id={rj.job_id}  task_id={task}  repo={rj.repo}  name="{rj.job_name}"'
             )
-            lines.append(
-                f"        attempt={rj.attempt}  runs_on={_format_str_list(rj.runs_on)}"
-            )
+            lines.append(f"        attempt={rj.attempt}  runs_on={_format_str_list(rj.runs_on)}")
     lines.append("")
 
     # Queue (waiting only).
@@ -2399,9 +2353,7 @@ def render_rich(snap: Snapshot):
     header_text.append(f"@ {snap.host}", style="cyan")
     header_text.append(f"   as_of={_rfc3339_utc_z(snap.as_of)}\n", style="dim")
     header_text.append("runners: ", style="bold")
-    header_text.append(
-        f"{online} online / {n_runners}", style="green" if online else "red"
-    )
+    header_text.append(f"{online} online / {n_runners}", style="green" if online else "red")
     header_text.append("    totals: ", style="bold")
     header_text.append(f"running={t.running}  waiting={t.waiting}  total={t.total}")
     if snap.filter_repo or snap.filter_label:
@@ -2428,9 +2380,7 @@ def render_rich(snap: Snapshot):
         rt.add_row("(none)", "", "", "", "", "")
     else:
         for r in snap.runners:
-            online_cell = (
-                Text("yes", style="green") if is_online(r) else Text("no", style="red")
-            )
+            online_cell = Text("yes", style="green") if is_online(r) else Text("no", style="red")
             # Three-way visual distinction (online operators want to see
             # active vs idle at a glance without breaking the
             # two-state online/offline semantics elsewhere):
@@ -2570,9 +2520,7 @@ def render_rich(snap: Snapshot):
                 else Text("-", style="dim")
             )
             attempt_cell = (
-                Text(f"{j.attempt} (rerun)", style="red")
-                if j.attempt > 1
-                else Text(str(j.attempt))
+                Text(f"{j.attempt} (rerun)", style="red") if j.attempt > 1 else Text(str(j.attempt))
             )
             qt.add_row(
                 str(j.position),
@@ -2647,7 +2595,7 @@ def render_rich(snap: Snapshot):
 
 
 def _resolve_repos_for_jobs(
-    client: Client,
+    client: RepoResolver,
     jobs: Iterable[RawJob],
 ) -> dict[int, str]:
     """Build the repo_id -> slug map a Snapshot needs.
@@ -2798,7 +2746,7 @@ def _scope_snapshot_queue(
 
 
 def _do_one_fetch(
-    client: Client,
+    client: QueueSource,
     host: str,
     now: datetime,
     *,
@@ -2843,7 +2791,7 @@ def _do_one_fetch(
                     node_prefix=config.metrics_node_prefix,
                     timeout=config.metrics_timeout,
                 )
-            except Exception as e:  # noqa: BLE001 (never crash on metrics)
+            except Exception as e:
                 runner_pods, metrics_error = (), f"metrics fetch failed: {e}"
         else:
             # metrics off (default): mark the section "disabled" so
@@ -2857,10 +2805,8 @@ def _do_one_fetch(
         # already never raises); the outer try/except is a backstop only.
         if config.ncps_enabled:
             try:
-                ncps = fetch_ncps_status(
-                    config.metrics_url, timeout=config.metrics_timeout
-                )
-            except Exception:  # noqa: BLE001 (never crash on ncps)
+                ncps = fetch_ncps_status(config.metrics_url, timeout=config.metrics_timeout)
+            except Exception:
                 ncps = None
         else:
             # NCPS off: mark with the sentinel so renderers and JSON
@@ -2914,7 +2860,7 @@ class _QuitKeyWatcher:
                 return self
             saved = termios.tcgetattr(fd)
             tty.setcbreak(fd)
-        except Exception:  # noqa: BLE001 (never crash on terminal setup)
+        except Exception:
             # No termios (Windows), no fileno (StringIO), closed fd,
             # termios.error (not an OSError subclass).
             return self
@@ -2963,7 +2909,7 @@ def run_watch(
     format_mode: str = "rich",
     filter_repo: str | None = None,
     filter_label: tuple[str, ...] = (),
-    client: Client | None = None,
+    client: QueueSource | None = None,
     clock=None,
     sleep_fn=None,
     wait_fn: Callable[[float], bool] | None = None,
@@ -3037,7 +2983,10 @@ def run_watch(
     from rich.live import Live as _RichLive
 
     if clock is None:
-        clock = lambda: datetime.now(UTC)
+
+        def clock():
+            return datetime.now(UTC)
+
     key_watcher: _QuitKeyWatcher | None = None
     if wait_fn is None:
         if sleep_fn is None:
@@ -3060,8 +3009,7 @@ def run_watch(
     # is a pipe or a StringIO. Downgrade gracefully and warn.
     if screen and not getattr(console, "is_terminal", True):
         _sys.stderr.write(
-            "fj-queue: stdout is not a TTY; "
-            "downgrading watch from screen mode to inline\n"
+            "fj-queue: stdout is not a TTY; downgrading watch from screen mode to inline\n"
         )
         screen = False
 
@@ -3152,7 +3100,7 @@ def run_watch(
                         # empty dashboard. CLI maps to exit=4.
                         raise
                     # last_good_at is non-None whenever last_good is.
-                    assert last_good_at is not None
+                    assert last_good_at is not None  # noqa: S101 (type narrowing)
                     stale_marker = _format_stale_marker(last_good_at, interval)
                     snap_to_render = last_good
                 else:
@@ -3295,8 +3243,7 @@ def _build_parser():
         action="append",
         default=None,
         metavar="LABEL",
-        help="scope to jobs whose runs_on includes at least this label "
-        "(repeatable; subset filter)",
+        help="scope to jobs whose runs_on includes at least this label (repeatable; subset filter)",
     )
     parser.add_argument(
         "--repo",
@@ -3476,9 +3423,7 @@ def main(argv=None, *, client=None, stdout=None, stderr=None, is_tty=None) -> in
         try:
             out.write(render_schema() + "\n")
         except ConfigError as e:
-            return _emit_error(
-                e, host="", fmt=args.format, token=None, stdout=out, stderr=err
-            )
+            return _emit_error(e, host="", fmt=args.format, token=None, stdout=out, stderr=err)
         return EXIT_OK
 
     if is_tty is None:

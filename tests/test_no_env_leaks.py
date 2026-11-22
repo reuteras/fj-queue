@@ -64,9 +64,7 @@ FORBIDDEN_PATTERNS: list[tuple[str, str]] = [
 # as part of an org/repo path or login field) but not as a project keyword
 # in prose (e.g. "Crossplane" with capital C is the OSS project name and
 # may appear in documentation).
-FORBIDDEN_PATTERNS.append(
-    (r"\"crossplane\"", "internal org slug as JSON string literal")
-)
+FORBIDDEN_PATTERNS.append((r"\"crossplane\"", "internal org slug as JSON string literal"))
 FORBIDDEN_PATTERNS.append((r"crossplane/", "internal org slug in repo path"))
 FORBIDDEN_PATTERNS.append((r"\bcontainers/", "real 'containers' org slug in repo path"))
 
@@ -86,11 +84,7 @@ def _should_skip(path: Path) -> bool:
 
     # Check excluded dir prefixes (M5 scope).
     rel_str = str(rel)
-    for prefix in EXCLUDED_DIR_PREFIXES:
-        if rel_str.startswith(prefix):
-            return True
-
-    return False
+    return any(rel_str.startswith(prefix) for prefix in EXCLUDED_DIR_PREFIXES)
 
 
 def _collect_text_files() -> list[Path]:

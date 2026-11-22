@@ -172,9 +172,7 @@ def test_plain_contains_no_unicode_box_drawing():
     out = fq.render_plain(snap)
     for ch in out:
         cp = ord(ch)
-        assert not (0x2500 <= cp <= 0x257F), (
-            f"plain output contains box-drawing U+{cp:04X}"
-        )
+        assert not (0x2500 <= cp <= 0x257F), f"plain output contains box-drawing U+{cp:04X}"
     # Common offenders not in the box-drawing block.
     for forbidden in ("│", "─", "┌", "┐", "└", "┘", "├", "┤"):
         assert forbidden not in out
@@ -571,12 +569,8 @@ def test_rich_idle_runner_renders_dim_green_distinct_from_active():
     runners_idle_only = [
         _runner(1, name="idle-r", status="idle", labels=("grunt",)),
     ]
-    active_text = _render_rich_to_text(
-        _snap(runners=runners_active_only), width=120, color=True
-    )
-    idle_text = _render_rich_to_text(
-        _snap(runners=runners_idle_only), width=120, color=True
-    )
+    active_text = _render_rich_to_text(_snap(runners=runners_active_only), width=120, color=True)
+    idle_text = _render_rich_to_text(_snap(runners=runners_idle_only), width=120, color=True)
 
     # Both have green somewhere in the rendered output.
     assert "\x1b[32m" in active_text or "\x1b[92m" in active_text
@@ -599,9 +593,7 @@ def test_rich_idle_runner_renders_dim_green_distinct_from_active():
         r")"
         r"(?:;[^m]*)?m"
     )
-    assert dim_plus_green.search(idle_text), (
-        "idle render did not emit dim+green SGR combination"
-    )
+    assert dim_plus_green.search(idle_text), "idle render did not emit dim+green SGR combination"
     assert not dim_plus_green.search(active_text), (
         "active-only render unexpectedly emitted dim+green together"
     )
@@ -613,9 +605,7 @@ def test_rich_unschedulable_warning_renders_red_in_color_mode():
     """
     runners = [_runner(1, status="active", labels=("grunt",))]
     jobs = [_job(10, runs_on=("nope",), needs=())]
-    text = _render_rich_to_text(
-        _snap(runners=runners, jobs=jobs), width=120, color=True
-    )
+    text = _render_rich_to_text(_snap(runners=runners, jobs=jobs), width=120, color=True)
     # Red SGR present somewhere (the unschedulable cell + warnings panel border).
     assert "\x1b[31m" in text or "\x1b[91m" in text
 
@@ -675,16 +665,12 @@ def _pods():
 
 def _metrics_snap():
     """A snapshot with populated per-pod runner resources."""
-    runners = [
-        _runner(3, name="k8s-runner", status="active", labels=("docker", "grunt"))
-    ]
+    runners = [_runner(3, name="k8s-runner", status="active", labels=("docker", "grunt"))]
     return _snap(runners=runners, runner_pods=_pods())
 
 
 def _metrics_error_snap():
-    runners = [
-        _runner(3, name="k8s-runner", status="active", labels=("docker", "grunt"))
-    ]
+    runners = [_runner(3, name="k8s-runner", status="active", labels=("docker", "grunt"))]
     return _snap(
         runners=runners,
         runner_pods=(),
@@ -779,9 +765,7 @@ def test_rich_runner_resources_golden_width_120_no_color(snapshot):
 
 
 def test_rich_metrics_unavailable_golden_width_120_no_color(snapshot):
-    assert (
-        _render_rich_to_text(_metrics_error_snap(), width=120, color=False) == snapshot
-    )
+    assert _render_rich_to_text(_metrics_error_snap(), width=120, color=False) == snapshot
 
 
 def _metrics_disabled_snap():
@@ -824,9 +808,7 @@ def _ncps(active=True, req=8.5, inflight=1, upstream=0.3, bytes_ps=4000000.0):
 
 def _ncps_snap(ncps=None, metrics_error=None, ncps_error=None):
     runners = [_runner(3, name="k8s-runner", status="active", labels=("grunt",))]
-    return _snap(
-        runners=runners, ncps=ncps, metrics_error=metrics_error, ncps_error=ncps_error
-    )
+    return _snap(runners=runners, ncps=ncps, metrics_error=metrics_error, ncps_error=ncps_error)
 
 
 def test_plain_ncps_active_line():
@@ -836,9 +818,7 @@ def test_plain_ncps_active_line():
 
 def test_plain_ncps_idle_line():
     out = fq.render_plain(
-        _ncps_snap(
-            ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0)
-        )
+        _ncps_snap(ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0))
     )
     assert "NCPS: idle" in out
 
@@ -849,9 +829,7 @@ def test_plain_ncps_disabled_line():
 
 
 def test_plain_ncps_unavailable_line():
-    out = fq.render_plain(
-        _ncps_snap(ncps=None, metrics_error="timeout querying prometheus")
-    )
+    out = fq.render_plain(_ncps_snap(ncps=None, metrics_error="timeout querying prometheus"))
     assert "NCPS: unavailable (timeout querying prometheus)" in out
 
 
@@ -902,9 +880,7 @@ def test_rich_ncps_active_line_present_and_green():
 
 def test_rich_ncps_idle_line():
     text = _render_rich_to_text(
-        _ncps_snap(
-            ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0)
-        ),
+        _ncps_snap(ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0)),
         width=120,
         color=False,
     )
@@ -918,11 +894,7 @@ def test_plain_ncps_active_golden(snapshot):
 def test_plain_ncps_idle_golden(snapshot):
     assert (
         fq.render_plain(
-            _ncps_snap(
-                ncps=_ncps(
-                    active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0
-                )
-            )
+            _ncps_snap(ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0))
         )
         == snapshot
     )
@@ -942,10 +914,7 @@ def test_plain_ncps_disabled_golden(snapshot):
 
 
 def test_rich_ncps_active_golden_width_120_no_color(snapshot):
-    assert (
-        _render_rich_to_text(_ncps_snap(ncps=_ncps()), width=120, color=False)
-        == snapshot
-    )
+    assert _render_rich_to_text(_ncps_snap(ncps=_ncps()), width=120, color=False) == snapshot
 
 
 def test_rich_ncps_unavailable_golden_width_120_no_color(snapshot):
@@ -967,10 +936,7 @@ def test_rich_ncps_unavailable_golden_width_120_no_color(snapshot):
 def test_plain_running_section_lists_running_jobs():
     out = fq.render_plain(_typical_snap())
     assert "RUNNING (1):" in out
-    assert (
-        'job_id=83886  task_id=85492  repo=owner-a/repo-a  name="Chainsaw E2E Tests"'
-        in out
-    )
+    assert 'job_id=83886  task_id=85492  repo=owner-a/repo-a  name="Chainsaw E2E Tests"' in out
 
 
 def test_plain_running_section_empty_marker():

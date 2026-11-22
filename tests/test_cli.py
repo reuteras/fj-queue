@@ -16,6 +16,7 @@ from __future__ import annotations
 import io
 import json
 import os
+import secrets
 from pathlib import Path
 
 import httpx
@@ -23,6 +24,8 @@ import pytest
 import respx
 
 import fj_queue as fq
+
+TOKEN = secrets.token_hex()
 
 FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
@@ -278,7 +281,7 @@ def test_main_scrubs_token_from_json_error_envelope(monkeypatch):
     passes config.token to render_json_error, so a token that leaks
     into an exception message is masked in the stdout envelope.
     """
-    secret = "SUPERSECRET_TOKEN_ABC123"
+    secret = secrets.token_hex()
     monkeypatch.setenv("FORGEJO_TOKEN", secret)
     client = FakeClient(error=fq.ConnectionError(f"boom with {secret} in it"))
     out, err = io.StringIO(), io.StringIO()
@@ -625,7 +628,7 @@ def test_stderr_diagnostic_scrubs_token_in_plain_mode(monkeypatch):
     `--format plain` run that hits an exception carrying the token in
     its message must NOT leak the literal token to stderr.
     """
-    secret = "SUPERSECRET_TOKEN_PLAIN"
+    secret = secrets.token_hex()
     monkeypatch.setenv("FORGEJO_TOKEN", secret)
     client = FakeClient(error=fq.ConnectionError(f"boom with {secret} embedded"))
     out, err = io.StringIO(), io.StringIO()
@@ -647,7 +650,7 @@ def test_stderr_diagnostic_scrubs_token_in_json_mode(monkeypatch):
     """The JSON mode already scrubs stdout; the stderr line emitted
     alongside the envelope must also scrub (defense in depth).
     """
-    secret = "SUPERSECRET_TOKEN_JSON_STDERR"
+    secret = secrets.token_hex()
     monkeypatch.setenv("FORGEJO_TOKEN", secret)
     client = FakeClient(error=fq.ConnectionError(f"fail near {secret} now"))
     out, err = io.StringIO(), io.StringIO()
@@ -670,7 +673,7 @@ def test_build_error_renderable_scrubs_token():
     """
     from rich.console import Console as _Console
 
-    secret = "SUPERSECRET_WATCH_PANEL"
+    secret = secrets.token_hex()
     exc = fq.AuthError(f"401 with leaked {secret} in body")
     panel = fq._build_error_renderable(
         exc,
@@ -692,9 +695,7 @@ def test_build_error_renderable_no_scrub_when_token_falsy():
     from rich.console import Console as _Console
 
     exc = fq.AuthError("plain auth error message")
-    panel = fq._build_error_renderable(
-        exc, title="auth error", headline="Boom.", scrub_token=None
-    )
+    panel = fq._build_error_renderable(exc, title="auth error", headline="Boom.", scrub_token=None)
     buf = io.StringIO()
     _Console(file=buf, width=120, force_terminal=False, no_color=True).print(panel)
     assert "plain auth error message" in buf.getvalue()
@@ -762,7 +763,7 @@ def test_client_init_raises_config_error_on_invalid_url():
     Config with a CRLF-injected host raises ConfigError (subclass of
     FjQueueError), NOT httpx.InvalidURL.
     """
-    bad = fq.Config(host="bad\r\nval", token="tok")
+    bad = fq.Config(host="bad\r\nval", token=TOKEN)
     with pytest.raises(fq.ConfigError, match="invalid --host"):
         fq.Client(bad)
 

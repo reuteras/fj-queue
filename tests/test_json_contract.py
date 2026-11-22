@@ -19,6 +19,7 @@ envelope shape, and non-FjQueueError fallback.
 from __future__ import annotations
 
 import json
+import secrets
 from datetime import UTC, datetime, timezone
 from pathlib import Path
 
@@ -26,6 +27,8 @@ import jsonschema
 import pytest
 
 import fj_queue as fq
+
+TOKEN = secrets.token_hex()
 
 # ---------------------------------------------------------------------------
 # Fixtures and helpers
@@ -417,9 +420,7 @@ def test_render_json_validates_against_schema_for_typical_snapshot(schema):
         (fq.SchemaDrift, "schema_drift", fq.EXIT_SCHEMA_DRIFT),
     ],
 )
-def test_error_envelope_code_and_exit_per_exception(
-    exc_cls, expected_code, expected_exit
-):
+def test_error_envelope_code_and_exit_per_exception(exc_cls, expected_code, expected_exit):
     exc = exc_cls("something went wrong")
     rendered = fq.render_json_error(exc, host=HOST)
     parsed = json.loads(rendered)
@@ -481,10 +482,9 @@ def test_error_envelope_scrubs_token_from_message():
     a 4xx body that M1 then snippet'd into a ConnectionError), the
     scrub_token kwarg masks it before serialization.
     """
-    secret = "abc123DEADBEEFsecrettoken456"
+    secret = secrets.token_hex()
     exc = fq.ConnectionError(
-        f"403 on /api/v1/admin/actions/runners: "
-        f'{{"error":"bad Authorization: token {secret}"}}'
+        f'403 on /api/v1/admin/actions/runners: {{"error":"bad Authorization: token {secret}"}}'
     )
     rendered = fq.render_json_error(exc, host=HOST, scrub_token=secret)
     parsed = json.loads(rendered)
@@ -659,13 +659,9 @@ FIXTURES = Path(__file__).resolve().parent / "fixtures"
 
 def test_live_fixture_renders_valid_json(schema):
     runners = [
-        fq._normalize_runner(d)
-        for d in json.loads((FIXTURES / "runners-live.json").read_text())
+        fq._normalize_runner(d) for d in json.loads((FIXTURES / "runners-live.json").read_text())
     ]
-    jobs = [
-        fq._normalize_job(d)
-        for d in json.loads((FIXTURES / "jobs-live.json").read_text())
-    ]
+    jobs = [fq._normalize_job(d) for d in json.loads((FIXTURES / "jobs-live.json").read_text())]
     snap = fq.aggregate(
         runners=runners,
         jobs=jobs,
@@ -697,9 +693,7 @@ def test_live_fixture_renders_valid_json(schema):
 # ---------------------------------------------------------------------------
 
 
-def _pod(
-    name, *, node="node-a-1", cpu=0.01, mem=700_000_000, cpu_limit=None, mem_limit=None
-):
+def _pod(name, *, node="node-a-1", cpu=0.01, mem=700_000_000, cpu_limit=None, mem_limit=None):
     return fq.PodResource(
         pod=name,
         node=node,
@@ -812,9 +806,7 @@ def test_ncps_null_when_absent_validates(schema):
 
 
 def test_ncps_idle_wire_shape(schema):
-    snap = _snap(
-        ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0)
-    )
+    snap = _snap(ncps=_ncps(active=False, req=0.0, inflight=0, upstream=0.0, bytes_ps=0.0))
     d = fq.to_dict(snap)
     assert d["ncps"]["active"] is False
     # Idle NCPS: ncps_error must be null (not "disabled").

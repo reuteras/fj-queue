@@ -17,12 +17,15 @@ exits cleanly, sleep is injected (no real sleep in tests).
 from __future__ import annotations
 
 import io
+import secrets
 from collections.abc import Callable
 from datetime import UTC, datetime, timezone
 
 import pytest
 
 import fj_queue as fq
+
+TOKEN = secrets.token_hex()
 
 # ---------------------------------------------------------------------------
 # Fixtures
@@ -178,7 +181,7 @@ def test_happy_path_three_distinct_frames():
     client = FakeClient([_good_tick("a"), _good_tick("b"), _good_tick("c")])
     frames: list = []
     rc = fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=0.0,
         iterations=3,
         client=client,
@@ -222,7 +225,7 @@ def test_scripted_sequence_good_good_timeout_good():
     frames: list[tuple[int, fq.Snapshot | None, str | None]] = []
 
     rc = fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=0.0,
         iterations=4,
         client=client,
@@ -266,7 +269,7 @@ def test_stale_marker_carries_last_good_at_hhmmss_and_interval():
     # Last-good fires at T0 = 14:03:11; failure at T0 + 1s.
     # interval=2.0 is the documented PRD default.
     fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=2.0,
         iterations=2,
         client=client,
@@ -292,7 +295,7 @@ def test_stale_marker_fractional_interval_formatted_with_g():
     )
     frames: list = []
     fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=2.5,
         iterations=2,
         client=client,
@@ -319,9 +322,7 @@ def test_auth_error_on_first_tick_raises_without_rendering_anything():
     frames: list = []
     with pytest.raises(fq.AuthError):
         fq.run_watch(
-            config=fq.Config(
-                host=HOST, token="bad", timeout=5.0, metrics_enabled=False
-            ),
+            config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
             interval=0.0,
             iterations=10,
             client=client,
@@ -355,7 +356,7 @@ def test_auth_error_after_some_good_ticks_renders_error_frame_then_raises():
     console, buf = _capturing_console()
     with pytest.raises(fq.AuthError):
         fq.run_watch(
-            config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+            config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
             interval=0.0,
             iterations=10,
             client=client,
@@ -396,7 +397,7 @@ def test_schema_drift_stops_no_retry():
     frames: list = []
     with pytest.raises(fq.SchemaDrift):
         fq.run_watch(
-            config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+            config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
             interval=2.0,
             iterations=10,
             client=client,
@@ -431,7 +432,7 @@ def test_mid_loop_schema_drift_renders_error_frame_then_raises():
     console, buf = _capturing_console()
     with pytest.raises(fq.SchemaDrift):
         fq.run_watch(
-            config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+            config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
             interval=0.0,
             iterations=10,
             client=client,
@@ -460,7 +461,7 @@ def test_first_tick_schema_drift_raises_no_dashboard():
     frames: list = []
     with pytest.raises(fq.SchemaDrift):
         fq.run_watch(
-            config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+            config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
             interval=0.0,
             iterations=10,
             client=client,
@@ -487,7 +488,7 @@ def test_first_tick_connection_error_raises_no_dashboard():
     frames: list = []
     with pytest.raises(fq.ConnectionError):
         fq.run_watch(
-            config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+            config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
             interval=0.0,
             iterations=10,
             client=client,
@@ -517,7 +518,7 @@ def test_keyboard_interrupt_during_sleep_exits_130():
         raise KeyboardInterrupt()
 
     rc = fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=0.0,
         iterations=10,
         client=client,
@@ -539,7 +540,7 @@ def test_keyboard_interrupt_during_fetch_exits_130():
     """
     client = FakeClient([KeyboardInterrupt()])
     rc = fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=0.0,
         iterations=10,
         client=client,
@@ -568,7 +569,7 @@ def test_q_keypress_during_wait_exits_0():
         return True
 
     rc = fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=3.0,
         iterations=10,
         client=client,
@@ -627,7 +628,7 @@ def test_iterations_bound_returns_normally():
     client = FakeClient([_good_tick() for _ in range(5)])
     frames: list = []
     rc = fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=0.0,
         iterations=5,
         client=client,
@@ -651,7 +652,7 @@ def test_sleep_called_between_ticks_not_after_last():
     sleep_calls: list[float] = []
     client = FakeClient([_good_tick() for _ in range(3)])
     fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=2.5,
         iterations=3,
         client=client,
@@ -674,7 +675,7 @@ def test_owned_client_is_closed_on_normal_exit():
     """
     client = FakeClient([_good_tick()])
     fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=0.0,
         iterations=1,
         client=client,
@@ -698,7 +699,7 @@ def test_format_mode_plain_renders_plain_output_in_watch():
     client = FakeClient([_good_tick()])
     console, buf = _capturing_console()
     fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=0.0,
         iterations=1,
         format_mode="plain",
@@ -722,7 +723,7 @@ def test_format_mode_plain_stale_marker_prefixes_frame():
     client = FakeClient([_good_tick(), fq.ConnectionError("timeout")])
     console, buf = _capturing_console()
     fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=2.0,
         iterations=2,
         format_mode="plain",
@@ -750,7 +751,7 @@ def test_screen_true_on_non_tty_console_downgrades_with_warning(capsys):
     client = FakeClient([_good_tick()])
     console = _silent_console()  # force_terminal=False -> is_terminal False
     rc = fq.run_watch(
-        config=fq.Config(host=HOST, token="t", timeout=5.0, metrics_enabled=False),
+        config=fq.Config(host=HOST, token=TOKEN, timeout=5.0, metrics_enabled=False),
         interval=0.0,
         iterations=1,
         client=client,
@@ -789,8 +790,7 @@ def test_format_stale_marker_converts_non_utc_to_utc_first():
     last_good = datetime(2026, 5, 27, 11, 5, 42, tzinfo=plus_two)
     # 11:05:42 +02:00 == 09:05:42 UTC.
     assert (
-        fq._format_stale_marker(last_good, 5)
-        == "STALE (last good 09:05:42 UTC, retrying every 5s)"
+        fq._format_stale_marker(last_good, 5) == "STALE (last good 09:05:42 UTC, retrying every 5s)"
     )
 
 
@@ -892,15 +892,13 @@ def test_run_watch_forwards_config_token_to_error_renderable_scrub():
     a one-frame error panel with the token masked. Proves run_watch
     passes `scrub_token=config.token` to `_build_error_renderable`.
     """
-    secret = "ghp_LIVEsecret_should_NOT_leak_via_watch_panel_AAAAA"
+    secret = secrets.token_hex()
     leaky_exc = fq.AuthError(f"401 unauthorized; raw header was 'token {secret}'")
     client = FakeClient([_good_tick(), leaky_exc])
     console, buf = _capturing_console()
     with pytest.raises(fq.AuthError):
         fq.run_watch(
-            config=fq.Config(
-                host=HOST, token=secret, timeout=5.0, metrics_enabled=False
-            ),
+            config=fq.Config(host=HOST, token=secret, timeout=5.0, metrics_enabled=False),
             interval=0.0,
             iterations=10,
             client=client,
@@ -930,17 +928,13 @@ def test_run_watch_forwards_config_token_on_schema_drift_too():
     `_build_error_renderable(scrub_token=config.token)`. The token
     must not leak via the schema-drift panel either.
     """
-    secret = "ghp_LIVEsecret_should_NOT_leak_via_schema_drift_panel"
-    leaky_exc = fq.SchemaDrift(
-        f"runners payload was None; auth header used token {secret}"
-    )
+    secret = secrets.token_hex()
+    leaky_exc = fq.SchemaDrift(f"runners payload was None; auth header used token {secret}")
     client = FakeClient([_good_tick(), leaky_exc])
     console, buf = _capturing_console()
     with pytest.raises(fq.SchemaDrift):
         fq.run_watch(
-            config=fq.Config(
-                host=HOST, token=secret, timeout=5.0, metrics_enabled=False
-            ),
+            config=fq.Config(host=HOST, token=secret, timeout=5.0, metrics_enabled=False),
             interval=0.0,
             iterations=10,
             client=client,

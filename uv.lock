@@ -131,18 +131,18 @@ dev = [
 
 [package.metadata]
 requires-dist = [
-    { name = "httpx" },
-    { name = "rich" },
+    { name = "httpx", specifier = ">=0.28.1" },
+    { name = "rich", specifier = ">=15.0.0" },
 ]
 
 [package.metadata.requires-dev]
 dev = [
-    { name = "jsonschema" },
-    { name = "mypy" },
-    { name = "pytest" },
-    { name = "respx" },
-    { name = "ruff" },
-    { name = "syrupy" },
+    { name = "jsonschema", specifier = ">=4.26.0" },
+    { name = "mypy", specifier = ">=2.4.1" },
+    { name = "pytest", specifier = ">=9.2.0" },
+    { name = "respx", specifier = ">=0.23.1" },
+    { name = "ruff", specifier = ">=0.17.5" },
+    { name = "syrupy", specifier = ">=7.0.0" },
 ]
 
 [[package]]

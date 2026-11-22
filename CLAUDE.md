@@ -15,7 +15,7 @@ The fork has diverged from upstream in user-visible ways (see `CHANGELOG.md` `[U
 Run from the checkout with `uv`, or straight from GitHub with `uvx --from git+https://github.com/reuteras/fj-queue fj-queue ...` (console script `fj-queue = "fj_queue:cli"` in `pyproject.toml`; the JSON schema ships as a wheel data file under `share/fj-queue/schema/`, and `load_schema` checks the checkout path first, then `sys.prefix`). There is no Homebrew install or tagged release in this fork.
 
 ```bash
-uv run fj_queue.py --host git.example.com              # or ./fj-queue (symlink)
+uv run fj_queue.py --host git.example.com              # or: uv run fj-queue ...
 uv run fj_queue.py --host git.example.com --mode watch
 uv run fj_queue.py --host git.example.com --format json | jq .totals
 ```
@@ -50,11 +50,11 @@ All actions are pinned by commit SHA with a version comment; keep it that way. A
 
 Updates come from **Dependabot** (`.github/dependabot.yml`): grouped weekly PRs for GitHub Actions and pre-commit hooks, daily for `uv`, all with a 7-day cooldown.
 
-`pyproject.toml` lists dependencies without versions; **`uv.lock` is the source of truth** for versions. When adding or bumping a package, check its release date and pick a version at least two weeks old (e.g. `uv lock -P 'pkg==X.Y.Z'`), including new transitive deps. The PEP-723 header at the top of `fj_queue.py` pins `httpx`/`rich` separately for standalone `uv run --script` use; keep it in agreement with `uv.lock`. Prefer stdlib over new dependencies (e.g. 1Password is called via `subprocess` on the `op` CLI, not an SDK). Transitive vulnerabilities (Trivy/OSV findings, e.g. `anyio` via httpx) are fixed by bumping the locked version in `uv.lock`.
+`pyproject.toml` gives lower bounds (`>=`) only; **`uv.lock` is the source of truth** for exact versions. When adding or bumping a package, check its release date and pick a version at least two weeks old (e.g. `uv lock -P 'pkg==X.Y.Z'`), including new transitive deps. Prefer stdlib over new dependencies (e.g. 1Password is called via `subprocess` on the `op` CLI, not an SDK). Transitive vulnerabilities (Trivy/OSV findings, e.g. `anyio` via httpx) are fixed by bumping the locked version in `uv.lock`.
 
 ## Architecture
 
-Everything lives in one file, **`fj_queue.py`** (~3500 lines). It is both an importable module and a PEP-723 self-contained script (`#!/usr/bin/env -S uv run --script`). It is organized into strict layers, marked `M1`..`M6` in section-header comments, and the layering is load-bearing:
+Everything lives in one file, **`fj_queue.py`** (~3500 lines). It is an importable module with a `fj-queue` console script (`fj_queue:cli`); there is no PEP-723 header. It is organized into strict layers, marked `M1`..`M6` in section-header comments, and the layering is load-bearing:
 
 - **Config + resolution** (`Config` frozen dataclass; `resolve_token` / `resolve_host` / `resolve_metrics_url` / `load_file_config`). Precedence is **CLI flag > env var > config file > built-in default**. Hard rules: no private host/URL ships as a default (omitting a required one exits 2); a literal `token` key in a config file is dropped, only a 1Password `token_ref` is accepted; `op` is only invoked when `$FORGEJO_TOKEN` is unset.
 - **`Client` (M1)**: the *only* layer that knows Forgejo URL paths and field names. Raw field names are mapped to stable internal names on frozen dataclasses (`Runner`, `RawJob`) here and nowhere else. **All server-supplied strings pass through `_safe_text`** (replaces C0/C1 control and bidi characters) at this boundary; keep that for any new field. `fetch_runners` pages via the RFC-5988 `Link` header (same-host enforcement, hard page cap); `fetch_jobs` is a single call; `resolve_repo` is per-process cached.

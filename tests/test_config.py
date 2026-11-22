@@ -144,9 +144,7 @@ def test_load_file_config_token_key_is_stripped(tmp_path):
 def test_load_file_config_other_keys_survive_stripping(tmp_path):
     """Stripping `token` must not affect other keys."""
     cfg = tmp_path / "safe.toml"
-    cfg.write_text(
-        'host = "safe.example.com"\ntoken = "do-not-load"\n[metrics]\nenabled = true\n'
-    )
+    cfg.write_text('host = "safe.example.com"\ntoken = "do-not-load"\n[metrics]\nenabled = true\n')
     result = fq.load_file_config(config_arg=str(cfg))
     assert result["host"] == "safe.example.com"
     assert result["metrics"]["enabled"] is True
@@ -382,7 +380,7 @@ def _metrics_main(argv, monkeypatch, tmp_path):
     monkeypatch.delenv("FORGEJO_HOST", raising=False)
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--host", "h.example.com"] + argv,
+        ["--format", "json", "--host", "h.example.com", *argv],
         client=_MetricsFakeClient(),
         stdout=out,
         stderr=err,
@@ -423,7 +421,7 @@ def test_metrics_flag_and_no_metrics_are_mutually_exclusive():
     parser = fq._build_parser()
     try:
         parser.parse_args(["--metrics", "--no-metrics"])
-        assert False, "should have raised SystemExit"
+        raise AssertionError("should have raised SystemExit")
     except SystemExit as e:
         assert e.code == 2  # argparse usage error
 
@@ -510,9 +508,7 @@ def test_node_prefix_flag_wired(monkeypatch, tmp_path):
         ["--no-metrics", "--node-prefix", "k8s-node-"], monkeypatch, tmp_path
     )
     assert rc == fq.EXIT_OK
-    assert (
-        parsed["metrics"]["error"] == "disabled"
-    )  # metrics off; prefix stored but not used
+    assert parsed["metrics"]["error"] == "disabled"  # metrics off; prefix stored but not used
 
 
 def test_node_prefix_from_config(monkeypatch, tmp_path):
@@ -521,8 +517,7 @@ def test_node_prefix_from_config(monkeypatch, tmp_path):
     monkeypatch.setenv("XDG_CONFIG_HOME", str(tmp_path / "empty"))
     cfg = tmp_path / "pfx.toml"
     cfg.write_text(
-        'host = "h.example.com"\n[metrics]\nenabled = false\n'
-        'node_prefix = "k8s-node-"\n'
+        'host = "h.example.com"\n[metrics]\nenabled = false\nnode_prefix = "k8s-node-"\n'
     )
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
@@ -551,7 +546,7 @@ def _ncps_main(argv, monkeypatch, tmp_path):
     monkeypatch.delenv("FORGEJO_HOST", raising=False)
     out, err = io.StringIO(), io.StringIO()
     rc = fq.main(
-        ["--format", "json", "--host", "h.example.com"] + argv,
+        ["--format", "json", "--host", "h.example.com", *argv],
         client=_MetricsFakeClient(),
         stdout=out,
         stderr=err,
@@ -605,7 +600,7 @@ def test_ncps_flag_and_no_ncps_are_mutually_exclusive():
     parser = fq._build_parser()
     try:
         parser.parse_args(["--ncps", "--no-ncps"])
-        assert False, "should have raised SystemExit"
+        raise AssertionError("should have raised SystemExit")
     except SystemExit as e:
         assert e.code == 2  # argparse usage error
 
